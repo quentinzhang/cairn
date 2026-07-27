@@ -3,6 +3,31 @@ import Combine
 import Foundation
 import SwiftUI
 
+enum CairnBuildInfo {
+    static var displayVersion: String {
+        displayVersion(from: Bundle.main.infoDictionary ?? [:])
+    }
+
+    static func displayVersion(
+        from info: [String: Any],
+        localeIdentifier: String? = nil
+    ) -> String {
+        let unknown = localeIdentifier.map {
+            L10n.string("common.unknown", localeIdentifier: $0)
+        } ?? L10n.string("common.unknown")
+        let version = info["CFBundleShortVersionString"] as? String ?? unknown
+        let build = info["CFBundleVersion"] as? String ?? unknown
+        if let localeIdentifier {
+            return L10n.format(
+                "build.version_format",
+                localeIdentifier: localeIdentifier,
+                arguments: [version, build]
+            )
+        }
+        return L10n.format("build.version_format", version, build)
+    }
+}
+
 @main
 @MainActor
 struct CairnApp: App {
@@ -210,7 +235,7 @@ private extension CodexCompletion {
             return platform.capitalized
         }
         let workspace = URL(fileURLWithPath: cwd).lastPathComponent
-        return workspace.isEmpty ? "Agent" : workspace
+        return workspace.isEmpty ? L10n.string("common.agent") : workspace
     }
 
     var promptPreview: String? {
@@ -708,9 +733,17 @@ private struct CairnControlView: View {
         .animation(Cairn.Motion.toggle, value: presenter.presentsNotes)
         .animation(Cairn.Motion.hover, value: isHovering)
         .animation(Cairn.Motion.attention, value: presenter.isCallingAttention)
-        .help(store.completions.isEmpty ? "Cairn is quietly listening" : "Click to show or hide notes · Drag to move")
-        .accessibilityLabel("Cairn note control")
-        .accessibilityValue(presenter.presentsNotes ? "Expanded" : "Collapsed")
+        .help(
+            store.completions.isEmpty
+                ? L10n.string("control.help.listening")
+                : L10n.string("control.help.notes")
+        )
+        .accessibilityLabel(L10n.string("control.accessibility.label"))
+        .accessibilityValue(
+            presenter.presentsNotes
+                ? L10n.string("control.accessibility.expanded")
+                : L10n.string("control.accessibility.collapsed")
+        )
     }
 }
 
@@ -1151,7 +1184,7 @@ private struct CompletionNote: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Cairn.Ink.secondary)
-                .help("Dismiss this note")
+                .help(L10n.string("note.dismiss"))
             }
 
             if let prompt = completion.promptPreview {
@@ -1207,7 +1240,7 @@ private struct CompletionNote: View {
             }
         }
         .animation(Cairn.Motion.hover, value: isHovering)
-        .help("Click to go back to where this ran")
+        .help(L10n.string("note.follow"))
     }
 }
 
@@ -1229,6 +1262,31 @@ private struct MenuBarQueueView: View {
     @ObservedObject var updateChecker: UpdateChecker
     @ObservedObject var permissions: PermissionExperience
 
+    private var completionStatus: String {
+        guard !store.completions.isEmpty else {
+            return L10n.string("menu.quietly_listening")
+        }
+        let key = store.completions.count == 1
+            ? "menu.active_notes.one"
+            : "menu.active_notes.many"
+        return L10n.format(key, store.completions.count)
+    }
+
+    private var listenerStatusLabel: String {
+        switch store.listenerStatus {
+        case "Starting…":
+            L10n.string("listener.starting")
+        case "Watching":
+            L10n.string("listener.watching")
+        case "Inbox unavailable":
+            L10n.string("listener.inbox_unavailable")
+        case "Inbox needs attention":
+            L10n.string("listener.inbox_attention")
+        default:
+            store.listenerStatus
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: Cairn.Space.md) {
@@ -1238,7 +1296,7 @@ private struct MenuBarQueueView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Cairn")
                         .font(Cairn.Typo.title)
-                    Text(store.completions.isEmpty ? "Quietly listening" : "\(store.completions.count) active notes")
+                    Text(completionStatus)
                         .font(Cairn.Typo.meta)
                         .foregroundStyle(Cairn.Ink.secondary)
                 }
@@ -1248,7 +1306,7 @@ private struct MenuBarQueueView: View {
                 Circle()
                     .fill(store.listenerStatus == "Watching" ? Cairn.Status.listening : Cairn.Status.degraded)
                     .frame(width: 7, height: 7)
-                    .help(store.listenerStatus)
+                    .help(listenerStatusLabel)
             }
             .padding(Cairn.Space.xl)
 
@@ -1266,9 +1324,9 @@ private struct MenuBarQueueView: View {
                     Image(systemName: "wind")
                         .font(.title2)
                         .foregroundStyle(Cairn.Ink.tertiary)
-                    Text("No notes waiting")
+                    Text(L10n.string("menu.no_notes"))
                         .font(.subheadline)
-                    Text("Completed agent turns will appear here.")
+                    Text(L10n.string("menu.notes_appear"))
                         .font(Cairn.Typo.meta)
                         .foregroundStyle(Cairn.Ink.secondary)
                 }
@@ -1295,14 +1353,16 @@ private struct MenuBarQueueView: View {
                     presenter.toggleNotes()
                 } label: {
                     Label(
-                        presenter.presentsNotes ? "Collapse notes" : "Expand notes",
+                        presenter.presentsNotes
+                            ? L10n.string("menu.collapse_notes")
+                            : L10n.string("menu.expand_notes"),
                         systemImage: presenter.presentsNotes ? "eye.slash" : "eye"
                     )
                 }
                 .buttonStyle(.plain)
                 .disabled(store.completions.isEmpty)
 
-                Button("Clear") {
+                Button(L10n.string("menu.clear")) {
                     store.clear()
                 }
                 .buttonStyle(.plain)
@@ -1313,7 +1373,7 @@ private struct MenuBarQueueView: View {
                 Button {
                     permissions.presentCenter()
                 } label: {
-                    Label("Access", systemImage: "lock.shield")
+                    Label(L10n.string("menu.access"), systemImage: "lock.shield")
                 }
                 .buttonStyle(.plain)
 
@@ -1323,12 +1383,26 @@ private struct MenuBarQueueView: View {
                     Image(systemName: "power")
                 }
                 .buttonStyle(.plain)
-                .help("Quit Cairn")
+                .help(L10n.string("menu.quit"))
             }
             .font(Cairn.Typo.meta)
             .foregroundStyle(Cairn.Ink.secondary)
             .padding(.horizontal, Cairn.Space.xl)
             .padding(.vertical, Cairn.Space.lg)
+
+            HStack(spacing: Cairn.Space.md) {
+                Text(CairnBuildInfo.displayVersion)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(Cairn.Ink.tertiary)
+
+                Spacer()
+
+                UpdateCheckControl(status: updateChecker.status) {
+                    updateChecker.checkNow()
+                }
+            }
+            .padding(.horizontal, Cairn.Space.xl)
+            .padding(.bottom, Cairn.Space.md)
         }
         .frame(width: Cairn.Metrics.menuWidth)
     }
@@ -1344,16 +1418,16 @@ private struct UpdateAvailableRow: View {
                 .foregroundStyle(Cairn.Brand.jade)
 
             VStack(alignment: .leading, spacing: Cairn.Space.xxs) {
-                Text("Update available")
+                Text(L10n.string("update.available"))
                     .font(Cairn.Typo.label)
-                Text("Cairn \(update.version)")
+                Text(L10n.format("update.version_format", update.version))
                     .font(Cairn.Typo.meta)
                     .foregroundStyle(Cairn.Ink.secondary)
             }
 
             Spacer(minLength: Cairn.Space.sm)
 
-            Button("View") {
+            Button(L10n.string("update.view")) {
                 NSWorkspace.shared.open(update.releaseURL)
             }
             .buttonStyle(.plain)
@@ -1367,10 +1441,63 @@ private struct UpdateAvailableRow: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(Cairn.Ink.tertiary)
-            .help("Skip this version")
+            .help(L10n.string("update.skip"))
         }
         .padding(.horizontal, Cairn.Space.xl)
         .padding(.vertical, Cairn.Space.md)
+    }
+}
+
+private struct UpdateCheckControl: View {
+    let status: UpdateCheckStatus
+    let onCheck: () -> Void
+
+    private var help: String {
+        switch status {
+        case .idle:
+            L10n.string("update.check")
+        case .checking:
+            L10n.string("update.checking")
+        case .upToDate:
+            L10n.string("update.check_again")
+        case .failed:
+            L10n.string("update.failed")
+        }
+    }
+
+    private var color: Color {
+        switch status {
+        case .idle:
+            Cairn.Brand.jade
+        case .checking, .upToDate:
+            Cairn.Ink.tertiary
+        case .failed:
+            Cairn.Status.degraded
+        }
+    }
+
+    var body: some View {
+        Button(action: onCheck) {
+            switch status {
+            case .idle:
+                Text(L10n.string("update.check"))
+            case .checking:
+                HStack(spacing: Cairn.Space.xs) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(L10n.string("update.checking"))
+                }
+            case .upToDate:
+                Label(L10n.string("update.up_to_date"), systemImage: "checkmark.circle")
+            case .failed:
+                Label(L10n.string("update.try_again"), systemImage: "arrow.clockwise")
+            }
+        }
+        .buttonStyle(.plain)
+        .font(Cairn.Typo.meta)
+        .foregroundStyle(color)
+        .disabled(status == .checking)
+        .help(help)
     }
 }
 
@@ -1422,7 +1549,7 @@ private struct MenuBarCompletionRow: View {
         .onTapGesture {
             TrailFinder.follow(completion)
         }
-        .help("Click to go back to where this ran")
+        .help(L10n.string("note.follow"))
     }
 }
 
@@ -1440,9 +1567,9 @@ private extension String {
 private extension Date {
     func compactRelative(to now: Date) -> String {
         let seconds = max(0, Int(now.timeIntervalSince(self)))
-        if seconds < 60 { return "now" }
-        if seconds < 3_600 { return "\(seconds / 60)m" }
-        if seconds < 86_400 { return "\(seconds / 3_600)h" }
-        return "\(seconds / 86_400)d"
+        if seconds < 60 { return L10n.string("relative.now") }
+        if seconds < 3_600 { return L10n.format("relative.minutes", seconds / 60) }
+        if seconds < 86_400 { return L10n.format("relative.hours", seconds / 3_600) }
+        return L10n.format("relative.days", seconds / 86_400)
     }
 }

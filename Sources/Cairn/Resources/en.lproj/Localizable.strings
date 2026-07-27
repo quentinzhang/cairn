@@ -1,0 +1,82 @@
+"common.unknown" = "Unknown";
+"common.agent" = "Agent";
+"build.version_format" = "Version %@ (%@)";
+
+"listener.starting" = "Starting…";
+"listener.watching" = "Watching";
+"listener.inbox_unavailable" = "Inbox unavailable";
+"listener.inbox_attention" = "Inbox needs attention";
+
+"control.help.listening" = "Cairn is quietly listening";
+"control.help.notes" = "Click to show or hide notes · Drag to move";
+"control.accessibility.label" = "Cairn note control";
+"control.accessibility.expanded" = "Expanded";
+"control.accessibility.collapsed" = "Collapsed";
+
+"note.dismiss" = "Dismiss this note";
+"note.follow" = "Click to go back to where this ran";
+"menu.quietly_listening" = "Quietly listening";
+"menu.active_notes.one" = "%d active note";
+"menu.active_notes.many" = "%d active notes";
+"menu.no_notes" = "No notes waiting";
+"menu.notes_appear" = "Completed agent turns will appear here.";
+"menu.collapse_notes" = "Collapse notes";
+"menu.expand_notes" = "Expand notes";
+"menu.clear" = "Clear";
+"menu.access" = "Access";
+"menu.quit" = "Quit Cairn";
+
+"update.available" = "Update available";
+"update.version_format" = "Cairn %@";
+"update.view" = "View";
+"update.skip" = "Skip this version";
+"update.check" = "Check for Updates…";
+"update.checking" = "Checking…";
+"update.up_to_date" = "Up to date";
+"update.check_again" = "Check again";
+"update.try_again" = "Try Again";
+"update.failed" = "Couldn’t check for updates";
+
+"relative.now" = "now";
+"relative.minutes" = "%dm";
+"relative.hours" = "%dh";
+"relative.days" = "%dd";
+
+"permission.state.checking" = "Checking…";
+"permission.state.on" = "On";
+"permission.state.optional" = "Optional";
+"permission.state.off" = "Off";
+"permission.state.unavailable" = "Unavailable";
+"permission.action.enable" = "Enable";
+"permission.action.open" = "Open";
+"permission.action.settings" = "Settings";
+"permission.application.not_installed" = "Not installed";
+"permission.application.not_needed" = "Not needed yet";
+
+"access.window.welcome" = "Welcome to Cairn";
+"access.window.title" = "Cairn Access";
+"access.welcome.ready" = "Cairn is ready";
+"access.welcome.no_extra_access" = "Completed agent turns can appear without extra access.";
+"access.welcome.no_monitoring" = "No screen recording or keyboard monitoring";
+"access.welcome.precise_return" = "Enable precise return when you want it";
+"access.welcome.later" = "Later";
+"access.welcome.review" = "Review Access";
+"access.title" = "Precise return";
+"access.subtitle" = "Cairn works without extra access.";
+"access.refresh" = "Refresh";
+"access.editor.title" = "Editor windows";
+"access.editor.detail" = "Uses Accessibility to raise the right window.";
+"access.terminal.title" = "Terminal tabs";
+"access.terminal.short_detail" = "Return to the exact tab.";
+"access.terminal.detail" = "Uses Automation to return to the exact tab.";
+"access.iterm.title" = "iTerm2 sessions";
+"access.iterm.short_detail" = "Return to the exact session.";
+"access.iterm.detail" = "Uses Automation to return to the exact session.";
+"access.browser.dynamic_title" = "%@ tabs";
+"access.browser.short_detail" = "Reuse the matching tab.";
+"access.browser.detail" = "Uses Automation to reuse the matching tab.";
+"access.browser.title" = "Browser tabs";
+"access.browser.unsupported" = "Current browser is not supported.";
+"access.privacy_summary" = "No screen recording, input monitoring, or notification access.";
+"access.open_settings" = "Open Settings";
+"access.settings" = "Settings";

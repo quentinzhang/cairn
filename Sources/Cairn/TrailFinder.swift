@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Foundation
+import os
 
 /// 寻迹 — follow a note back to the window its turn ran in.
 ///
@@ -35,6 +36,21 @@ enum ConversationTrail {
             return nil
         }
         return URL(string: "codex://threads/\(completion.sessionID)")
+    }
+
+    /// Hermes Desktop owns the same durable session id that its completion
+    /// hook receives. Its app URL opens that precise transcript rather than
+    /// merely bringing the Hermes process to the foreground.
+    static func hermesSessionURL(for completion: CodexCompletion) -> URL? {
+        guard completion.source?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "hermes",
+              completion.platform?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "desktop",
+              !completion.sessionID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              completion.sessionID != "unknown-session",
+              var components = URLComponents(string: "hermes://session") else {
+            return nil
+        }
+        components.path = "/\(completion.sessionID)"
+        return components.url
     }
 
     /// Prefer a thread deep link only when the turn actually lived in Codex
@@ -84,6 +100,15 @@ enum TrailFinder {
            UUID(uuidString: completion.sessionID) != nil,
            let deepLink = URL(string: "claude://resume?session=\(completion.sessionID)"),
            NSWorkspace.shared.open(deepLink) {
+            return
+        }
+
+        // Hermes Desktop accepts the durable session id emitted by its
+        // post_llm_call hook. CLI/TUI/Gateway turns intentionally retain the
+        // terminal/app fallback below; only the Desktop surface is addressable
+        // as a conversation.
+        if let hermesSessionURL = ConversationTrail.hermesSessionURL(for: completion),
+           NSWorkspace.shared.open(hermesSessionURL) {
             return
         }
 
@@ -354,15 +379,17 @@ enum TrailFinder {
 
     /// Opening a URL through NSWorkspace always spawns a fresh tab — macOS
     /// has no "focus the tab showing X" API. So for web surfaces we script
-    /// the default browser first: find a tab whose URL lives on the same
-    /// origin, select and raise it, and only open a new tab when none exists.
-    /// Both loopback spellings (127.0.0.1 / localhost) are matched, since the
-    /// user may have typed either.
+    /// every supported running browser, with the default browser first: find
+    /// a tab whose URL lives on the same origin, select and raise it, and only
+    /// open a new tab when none exists. Both loopback spellings
+    /// (127.0.0.1 / localhost) are matched, since the user may have typed
+    /// either.
     private static func openWebURLReusingTab(_ url: URL) {
-        if let browser = defaultScriptableBrowser(),
-           isRunning(bundleID: browser.bundleID),
-           focusExistingTab(in: browser, matchingPrefixes: tabMatchPrefixes(for: url)) {
-            return
+        let origins = tabMatchOrigins(for: url)
+        for browser in runningScriptableBrowsers() {
+            if focusExistingTab(in: browser, matchingOrigins: origins) {
+                return
+            }
         }
         NSWorkspace.shared.open(url)
     }
@@ -374,33 +401,60 @@ enum TrailFinder {
         let dialect: Dialect
     }
 
+    private static let knownBrowsers: [String: (String, ScriptableBrowser.Dialect)] = [
+        "com.apple.safari": ("Safari", .safari),
+        "com.apple.safaritechnologypreview": ("Safari Technology Preview", .safari),
+        "com.google.chrome": ("Google Chrome", .chromium),
+        "com.google.chrome.canary": ("Google Chrome Canary", .chromium),
+        "com.microsoft.edgemac": ("Microsoft Edge", .chromium),
+        "com.brave.browser": ("Brave Browser", .chromium),
+        "com.vivaldi.vivaldi": ("Vivaldi", .chromium),
+        "org.chromium.chromium": ("Chromium", .chromium),
+    ]
+
+    private static func scriptableBrowser(bundleID: String) -> ScriptableBrowser? {
+        let normalized = bundleID.lowercased()
+        guard let (name, dialect) = knownBrowsers[normalized] else { return nil }
+        return ScriptableBrowser(bundleID: normalized, scriptName: name, dialect: dialect)
+    }
+
     static func defaultScriptableBrowser() -> ScriptableBrowser? {
         guard let probe = URL(string: "https://example.com"),
               let appURL = NSWorkspace.shared.urlForApplication(toOpen: probe),
               let bundleID = Bundle(url: appURL)?.bundleIdentifier?.lowercased() else {
             return nil
         }
-        let known: [String: (String, ScriptableBrowser.Dialect)] = [
-            "com.apple.safari": ("Safari", .safari),
-            "com.apple.safaritechnologypreview": ("Safari Technology Preview", .safari),
-            "com.google.chrome": ("Google Chrome", .chromium),
-            "com.google.chrome.canary": ("Google Chrome Canary", .chromium),
-            "com.microsoft.edgemac": ("Microsoft Edge", .chromium),
-            "com.brave.browser": ("Brave Browser", .chromium),
-            "com.vivaldi.vivaldi": ("Vivaldi", .chromium),
-            "org.chromium.chromium": ("Chromium", .chromium),
-        ]
-        guard let (name, dialect) = known[bundleID] else { return nil }
-        return ScriptableBrowser(bundleID: bundleID, scriptName: name, dialect: dialect)
+        return scriptableBrowser(bundleID: bundleID)
     }
 
-    private static func isRunning(bundleID: String) -> Bool {
-        NSWorkspace.shared.runningApplications.contains {
-            $0.bundleIdentifier?.lowercased() == bundleID
+    private static func runningScriptableBrowsers() -> [ScriptableBrowser] {
+        var browsers: [ScriptableBrowser] = []
+        var seen = Set<String>()
+
+        func append(_ browser: ScriptableBrowser?) {
+            guard let browser,
+                  seen.insert(browser.bundleID).inserted else {
+                return
+            }
+            browsers.append(browser)
         }
+
+        let runningBundleIDs = Set(
+            NSWorkspace.shared.runningApplications.compactMap {
+                $0.bundleIdentifier?.lowercased()
+            }
+        )
+        if let browser = defaultScriptableBrowser(),
+           runningBundleIDs.contains(browser.bundleID) {
+            append(browser)
+        }
+        for bundleID in runningBundleIDs.sorted() {
+            append(scriptableBrowser(bundleID: bundleID))
+        }
+        return browsers
     }
 
-    private static func tabMatchPrefixes(for url: URL) -> [String] {
+    nonisolated static func tabMatchOrigins(for url: URL) -> [String] {
         guard let scheme = url.scheme, let host = url.host else { return [] }
         let port = url.port.map { ":\($0)" } ?? ""
         var hosts = [host]
@@ -414,14 +468,36 @@ enum TrailFinder {
 
     private static func focusExistingTab(
         in browser: ScriptableBrowser,
-        matchingPrefixes prefixes: [String]
+        matchingOrigins origins: [String]
     ) -> Bool {
-        guard !prefixes.isEmpty,
-              PermissionExperience.shared.canAutomate(bundleID: browser.bundleID) else {
+        guard !origins.isEmpty else {
             return false
         }
-        let condition = prefixes
-            .map { "(u starts with \"\($0)\")" }
+
+        // The access center refreshes permission state asynchronously. A note
+        // can be clicked while that cached state is still `checking`, so probe
+        // TCC again at the moment of use before deciding that tab inspection
+        // is unavailable. The probe never asks or displays a system prompt.
+        let cachedPermission = PermissionExperience.shared.canAutomate(
+            bundleID: browser.bundleID
+        )
+        let currentPermission = cachedPermission
+            ? CairnPermissionState.granted
+            : AutomationPermissionProbe.state(bundleID: browser.bundleID)
+        guard currentPermission == .granted else {
+            Logger.trail.notice(
+                """
+                Browser tab reuse skipped for \(browser.scriptName, privacy: .public): \
+                Automation is \(currentPermission.label, privacy: .public)
+                """
+            )
+            return false
+        }
+
+        // Match a complete origin boundary. A raw "starts with origin" check
+        // also accepts a different port such as :187890.
+        let condition = origins
+            .map { "(u is \"\($0)\") or (u starts with \"\($0)/\")" }
             .joined(separator: " or ")
 
         let script: String
@@ -480,7 +556,11 @@ enum TrailFinder {
         var error: NSDictionary?
         let result = script.executeAndReturnError(&error)
         if let error {
-            NSLog("Cairn TrailFinder AppleScript: \(error)")
+            let code = (error[NSAppleScript.errorNumber] as? Int).map(String.init) ?? "?"
+            let message = (error[NSAppleScript.errorMessage] as? String) ?? "\(error)"
+            Logger.trail.error(
+                "AppleScript failed \(code, privacy: .public) — \(message, privacy: .public)"
+            )
             return nil
         }
         return result.stringValue

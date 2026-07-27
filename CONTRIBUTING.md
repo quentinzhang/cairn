@@ -39,7 +39,10 @@ ad-hoc signing when the certificate is absent, so it works on any machine.
 Ad-hoc signatures change every build, which makes macOS treat each build as a
 new app and drop your Accessibility and Automation grants. Set
 `CAIRN_SIGN_IDENTITY` to a stable identity if you are working on the
-trail-back features.
+trail-back features. The script must also sign with
+`Resources/Cairn.entitlements`: Developer ID builds use Hardened Runtime, and
+without `com.apple.security.automation.apple-events` macOS denies Automation
+requests before showing a prompt or registering Cairn in System Settings.
 
 **Do not change `CFBundleIdentifier`** (`app.cairn.Cairn` in
 [`Resources/Info.plist`](Resources/Info.plist)). macOS keys Accessibility and
@@ -58,9 +61,9 @@ for `--version` and `--build`, rewrites the file and discards comments.
   that demands attention. The floating control is non-activating by design.
   "Add a notification for X" is almost always a no.
 - **Local.** No network service, no account, no telemetry, no analytics. The
-  only outbound request in the entire app is a once-a-day GitHub Releases check
-  for updates, and it fails silently. A PR that adds a second one needs a very
-  good reason.
+  only outbound request in the entire app is a GitHub Releases check, run once
+  a day or when the user explicitly asks. Automatic failures stay silent. A PR
+  that adds a second destination needs a very good reason.
 - **Deferential to the agent it hooks.** A bridge must never break, block, or
   slow the runtime it runs inside. Swallow every error, exit 0, finish fast. See
   [`docs/inbox-protocol.md`](docs/inbox-protocol.md) §8.
@@ -75,6 +78,8 @@ for `--version` and `--build`, rewrites the file and discards comments.
 | Improve trail-back / 寻迹 | [`Sources/Cairn/TrailFinder.swift`](Sources/Cairn/TrailFinder.swift) |
 | Change the panel, queue, or menu bar | [`Sources/Cairn/CairnApp.swift`](Sources/Cairn/CairnApp.swift) |
 | Change permission onboarding | [`Sources/Cairn/PermissionOnboarding.swift`](Sources/Cairn/PermissionOnboarding.swift) |
+| Change interface copy or add a language | [`Sources/Cairn/Resources/`](Sources/Cairn/Resources/) — keep every locale's key set identical |
+| Change update checks | [`Sources/Cairn/UpdateChecker.swift`](Sources/Cairn/UpdateChecker.swift) and its menu presentation in [`Sources/Cairn/CairnApp.swift`](Sources/Cairn/CairnApp.swift) |
 | Change the inbox contract itself | [`docs/inbox-protocol.md`](docs/inbox-protocol.md), as its own PR, discussed before code |
 
 ### Adding support for a new agent

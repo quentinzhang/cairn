@@ -6,6 +6,8 @@ cd "$root"
 swift build -c release
 
 app="$root/dist/Cairn.app"
+entitlements="$root/Resources/Cairn.entitlements"
+resource_bundle="$root/.build/release/Cairn_Cairn.bundle"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$root/.build/release/cairn" "$app/Contents/MacOS/cairn"
 cp "$root/Scripts/cairn_codex_hook.py" "$app/Contents/Resources/cairn_codex_hook.py"
@@ -19,6 +21,18 @@ cp "$root/Scripts/cairn_claude_hook.py" "$app/Contents/Resources/cairn_claude_ho
 cp -R "$root/OpenClawPlugin" "$app/Contents/Resources/OpenClawPlugin"
 cp "$root/Resources/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
 cp "$root/Resources/Info.plist" "$app/Contents/Info.plist"
+[[ -d "$resource_bundle" ]] || {
+  echo "Error: Swift package resource bundle is missing: $resource_bundle" >&2
+  exit 1
+}
+/bin/rm -rf "$app/Contents/Resources/Cairn_Cairn.bundle"
+cp -R "$resource_bundle" "$app/Contents/Resources/Cairn_Cairn.bundle"
+for locale in en zh-Hans ja; do
+  source_lproj="$root/Sources/Cairn/Resources/$locale.lproj"
+  destination_lproj="$app/Contents/Resources/$locale.lproj"
+  mkdir -p "$destination_lproj"
+  cp "$source_lproj/InfoPlist.strings" "$destination_lproj/InfoPlist.strings"
+done
 # A stable signing identity keeps TCC grants (Accessibility, Automation)
 # valid across rebuilds; ad-hoc signatures change every build and macOS
 # treats each one as a brand-new app. Override with CAIRN_SIGN_IDENTITY,
@@ -28,8 +42,27 @@ if [[ "$sign_identity" != "-" ]] && ! security find-identity -v -p codesigning |
   sign_identity="-"
 fi
 if [[ "$sign_identity" == "-" ]]; then
-  codesign --force --deep --sign - "$app" >/dev/null
+  codesign \
+    --force \
+    --deep \
+    --entitlements "$entitlements" \
+    --sign - \
+    "$app" >/dev/null
 else
-  codesign --force --deep --options runtime --timestamp --sign "$sign_identity" "$app" >/dev/null
+  codesign \
+    --force \
+    --deep \
+    --options runtime \
+    --timestamp \
+    --entitlements "$entitlements" \
+    --sign "$sign_identity" \
+    "$app" >/dev/null
 fi
+
+codesign -d --entitlements :- "$app" 2>/dev/null |
+  grep -q '<key>com.apple.security.automation.apple-events</key>' || {
+    echo "Error: signed app is missing the Apple Events entitlement." >&2
+    exit 1
+  }
+
 echo "Built $app (signed: $sign_identity)"

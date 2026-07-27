@@ -67,14 +67,16 @@ visible to anyone looking at your display or recording it.
 
 ## What leaves the machine
 
-One request, once a day:
+One request, automatically once a day or when the user chooses **Check for
+Updates**:
 
 ```
 GET https://api.github.com/repos/quentinzhang/cairn/releases/latest
 ```
 
-It sends no identifiers beyond what any HTTPS request implies, carries no note
-data, and fails silently. Nothing else in Cairn opens a network connection.
+It sends no identifiers beyond what any HTTPS request implies and carries no
+note data. Automatic failures stay silent; a user-initiated failure produces
+only an in-app retry state. Nothing else in Cairn opens a network connection.
 There is no account, no server, no telemetry, no analytics, no crash reporting.
 
 ## macOS privacy grants

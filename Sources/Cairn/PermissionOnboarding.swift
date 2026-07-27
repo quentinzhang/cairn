@@ -2,6 +2,21 @@ import AppKit
 import ApplicationServices
 import Carbon
 import SwiftUI
+import os
+
+/// Cairn's diagnostics, under one subsystem so a user can retrieve all of them:
+///
+///     log show --predicate 'subsystem == "app.cairn.Cairn"' --last 30m
+///
+/// `NSLog` is not an option: on current macOS it writes to stderr without
+/// reaching the unified log store, which makes it invisible from outside the
+/// app — exactly when a silent permission failure needs explaining. Every
+/// interpolation here is marked `.public`; os_log redacts by default, and a
+/// redacted diagnostic is not a diagnostic.
+extension Logger {
+    static let access = Logger(subsystem: "app.cairn.Cairn", category: "access")
+    static let trail = Logger(subsystem: "app.cairn.Cairn", category: "trail")
+}
 
 enum CairnPermissionState: Equatable, Sendable {
     case checking
@@ -12,11 +27,11 @@ enum CairnPermissionState: Equatable, Sendable {
 
     var label: String {
         switch self {
-        case .checking: "Checking…"
-        case .granted: "On"
-        case .notRequested: "Optional"
-        case .needsSettings: "Off"
-        case .unavailable: "Unavailable"
+        case .checking: L10n.string("permission.state.checking")
+        case .granted: L10n.string("permission.state.on")
+        case .notRequested: L10n.string("permission.state.optional")
+        case .needsSettings: L10n.string("permission.state.off")
+        case .unavailable: L10n.string("permission.state.unavailable")
         }
     }
 
@@ -45,9 +60,9 @@ struct CairnAccessPresentation: Equatable, Sendable {
 
         var title: String {
             switch self {
-            case .enable: "Enable"
-            case .open: "Open"
-            case .settings: "Settings"
+            case .enable: L10n.string("permission.action.enable")
+            case .open: L10n.string("permission.action.open")
+            case .settings: L10n.string("permission.action.settings")
             }
         }
     }
@@ -103,14 +118,14 @@ struct CairnAccessPresentation: Equatable, Sendable {
         switch application {
         case .notInstalled:
             Self(
-                label: "Not installed",
+                label: L10n.string("permission.application.not_installed"),
                 symbol: "minus.circle",
                 isGranted: false,
                 action: nil
             )
         case .notRunning:
             Self(
-                label: "Not needed yet",
+                label: L10n.string("permission.application.not_needed"),
                 symbol: "moon.zzz",
                 isGranted: false,
                 action: .open
@@ -122,6 +137,14 @@ struct CairnAccessPresentation: Equatable, Sendable {
 }
 
 enum AutomationPermissionProbe {
+    /// Match the harmless event sent by `requestConsent`.
+    ///
+    /// Wildcard event codes do not identify a concrete capability for TCC to
+    /// request. Using the exact read-only event here keeps status checks and
+    /// the user-initiated consent request consistent.
+    static let eventClass = AEEventClass(kAECoreSuite)
+    static let eventID = AEEventID(kAEGetData)
+
     static func classify(_ status: OSStatus) -> CairnPermissionState {
         switch status {
         case noErr:
@@ -137,6 +160,16 @@ enum AutomationPermissionProbe {
         }
     }
 
+    static func reconcile(
+        observed: CairnPermissionState,
+        knownDenied: Bool
+    ) -> CairnPermissionState {
+        if observed == .notRequested, knownDenied {
+            return .needsSettings
+        }
+        return observed
+    }
+
     static func state(bundleID: String) -> CairnPermissionState {
         let descriptor = NSAppleEventDescriptor(bundleIdentifier: bundleID)
         guard let target = descriptor.aeDesc else { return .unavailable }
@@ -144,35 +177,46 @@ enum AutomationPermissionProbe {
         // must not become a system interruption.
         let status = AEDeterminePermissionToAutomateTarget(
             target,
-            typeWildCard,
-            typeWildCard,
+            eventClass,
+            eventID,
             false
         )
         return classify(status)
     }
 
-    /// Ask the system for consent by sending a real, read-only Apple Event.
+    /// Ask the system for consent to send the same harmless event we probe.
     ///
-    /// `AEDeterminePermissionToAutomateTarget` with a wildcard event pair only
-    /// *reports* whether consent is needed — it never *asks*, whatever
-    /// `askUserIfNeeded` says. Driving the Enable button through it meant the
-    /// button did nothing at all. Sending an actual event is what raises the
-    /// consent dialog, so this asks for the smallest one there is.
-    static func requestConsent(scriptName: String) {
-        let source = "tell application \"\(scriptName)\" to return name"
-        guard let script = NSAppleScript(source: source) else {
-            NSLog("Cairn automation consent: could not compile a request for \(scriptName)")
-            return
+    /// A wildcard event cannot produce a useful consent request. The previous
+    /// workaround (`tell application ... to return name`) was not sufficient
+    /// either: AppleScript can evaluate it locally without dispatching an Apple
+    /// Event, so clicking Enable produced no TCC request and no prompt.
+    static func requestConsent(
+        bundleID: String,
+        applicationName: String
+    ) -> CairnPermissionState {
+        let descriptor = NSAppleEventDescriptor(bundleIdentifier: bundleID)
+        guard let target = descriptor.aeDesc else {
+            Logger.access.error(
+                "consent: cannot resolve \(applicationName, privacy: .public)"
+            )
+            return .unavailable
         }
-        var error: NSDictionary?
-        let result = script.executeAndReturnError(&error)
-        if let error {
-            // -1743 is a recorded denial: macOS will not ask again, and only
-            // Settings can undo it. Anything else is worth seeing.
-            NSLog("Cairn automation consent for \(scriptName): error \(error)")
-        } else {
-            NSLog("Cairn automation consent for \(scriptName): granted (\(result.stringValue ?? "?"))")
-        }
+
+        Logger.access.notice("consent: asking \(applicationName, privacy: .public)")
+        let status = AEDeterminePermissionToAutomateTarget(
+            target,
+            eventClass,
+            eventID,
+            true
+        )
+        let result = classify(status)
+        Logger.access.notice(
+            """
+            consent: \(applicationName, privacy: .public) returned \
+            \(status, privacy: .public) (\(result.label, privacy: .public))
+            """
+        )
+        return result
     }
 }
 
@@ -223,16 +267,16 @@ final class PermissionExperience: ObservableObject {
 
     private let terminalAccess = AutomationAccess(
         kind: .terminal,
-        title: "Terminal tabs",
-        detail: "Return to the exact tab.",
+        title: L10n.string("access.terminal.title"),
+        detail: L10n.string("access.terminal.short_detail"),
         bundleID: "com.apple.Terminal",
         scriptName: "Terminal",
         icon: "terminal"
     )
     private let itermAccess = AutomationAccess(
         kind: .iterm,
-        title: "iTerm2 sessions",
-        detail: "Return to the exact session.",
+        title: L10n.string("access.iterm.title"),
+        detail: L10n.string("access.iterm.short_detail"),
         bundleID: "com.googlecode.iterm2",
         scriptName: "iTerm2",
         icon: "rectangle.split.2x1"
@@ -242,6 +286,11 @@ final class PermissionExperience: ObservableObject {
     private var centerWindow: NSWindow?
     private var workspaceObservers: [NSObjectProtocol] = []
     private var refreshGeneration = 0
+    /// TCC can return `errAEEventNotPermitted` for a real request while its
+    /// preflight still reports `errAEEventWouldRequireUserConsent`. Remember
+    /// the stronger result for this run so the UI does not jump from Off back
+    /// to Optional before the user can act on it.
+    private var deniedAutomationBundleIDs: Set<String> = []
 
     private init() {
         migrateLegacyState()
@@ -283,7 +332,7 @@ final class PermissionExperience: ObservableObject {
             backing: .buffered,
             defer: false
         )
-        window.title = "Welcome to Cairn"
+        window.title = L10n.string("access.window.welcome")
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(
             rootView: PermissionWelcomeView(
@@ -316,7 +365,7 @@ final class PermissionExperience: ObservableObject {
             backing: .buffered,
             defer: false
         )
-        window.title = "Cairn Access"
+        window.title = L10n.string("access.window.title")
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: PermissionCenterView(experience: self))
         window.center()
@@ -343,17 +392,24 @@ final class PermissionExperience: ObservableObject {
         // because the row the user was told to switch on did not exist yet.
         UserDefaults.standard.set(true, forKey: PreferenceKey.accessibilityRequested)
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
+        let trusted = AXIsProcessTrustedWithOptions(options)
+        Logger.access.notice("accessibility asked, trusted=\(trusted, privacy: .public)")
         refresh()
     }
 
     func handleAutomation(_ kind: AutomationAccess.Kind) {
         guard let access = access(for: kind) else {
-            NSLog("Cairn access: no automation target for \(kind.rawValue)")
+            Logger.access.error("no automation target for \(kind.rawValue, privacy: .public)")
             return
         }
-        NSLog("Cairn access: \(kind.rawValue) -> \(String(describing: presentation(for: kind).action))")
-        switch presentation(for: kind).action {
+        let resolved = presentation(for: kind)
+        Logger.access.notice(
+            """
+            \(kind.rawValue, privacy: .public) tapped: state \(resolved.label, privacy: .public), \
+            action \(String(describing: resolved.action), privacy: .public)
+            """
+        )
+        switch resolved.action {
         case .open:
             openTarget(access)
         case .settings:
@@ -419,8 +475,8 @@ final class PermissionExperience: ObservableObject {
         let browser = TrailFinder.defaultScriptableBrowser().map {
             AutomationAccess(
                 kind: .browser,
-                title: "\($0.scriptName) tabs",
-                detail: "Reuse the matching tab.",
+                title: L10n.format("access.browser.dynamic_title", $0.scriptName),
+                detail: L10n.string("access.browser.short_detail"),
                 bundleID: $0.bundleID,
                 scriptName: $0.scriptName,
                 icon: "safari"
@@ -486,13 +542,22 @@ final class PermissionExperience: ObservableObject {
 
             guard let self, self.refreshGeneration == generation else { return }
             if applicationStates[.terminal] == .running {
-                self.terminalState = results[.terminal] ?? .unavailable
+                self.terminalState = self.resolvedAutomationState(
+                    results[.terminal] ?? .unavailable,
+                    bundleID: self.terminalAccess.bundleID
+                )
             }
             if applicationStates[.iterm] == .running {
-                self.itermState = results[.iterm] ?? .unavailable
+                self.itermState = self.resolvedAutomationState(
+                    results[.iterm] ?? .unavailable,
+                    bundleID: self.itermAccess.bundleID
+                )
             }
-            if browser != nil, applicationStates[.browser] == .running {
-                self.browserState = results[.browser] ?? .unavailable
+            if let browser, applicationStates[.browser] == .running {
+                self.browserState = self.resolvedAutomationState(
+                    results[.browser] ?? .unavailable,
+                    bundleID: browser.bundleID
+                )
             }
         }
     }
@@ -523,14 +588,62 @@ final class PermissionExperience: ObservableObject {
     }
 
     private func requestAutomation(_ access: AutomationAccess) {
-        let scriptName = access.scriptName
+        setState(.checking, for: access.kind)
         Task { [weak self] in
             // Detached because the consent dialog is modal to us: asking on the
             // main actor would freeze the access center behind it.
-            await Task.detached {
-                AutomationPermissionProbe.requestConsent(scriptName: scriptName)
+            let state = await Task.detached {
+                AutomationPermissionProbe.requestConsent(
+                    bundleID: access.bundleID,
+                    applicationName: access.scriptName
+                )
             }.value
-            self?.refresh()
+            self?.rememberAutomationState(state, bundleID: access.bundleID)
+            self?.setState(state, for: access.kind)
+            if state == .needsSettings {
+                self?.openPrivacySettings(anchor: "Privacy_Automation")
+            } else {
+                self?.refresh()
+            }
+        }
+    }
+
+    private func rememberAutomationState(
+        _ state: CairnPermissionState,
+        bundleID: String
+    ) {
+        switch state {
+        case .granted:
+            deniedAutomationBundleIDs.remove(bundleID)
+        case .needsSettings:
+            deniedAutomationBundleIDs.insert(bundleID)
+        case .checking, .notRequested, .unavailable:
+            break
+        }
+    }
+
+    private func resolvedAutomationState(
+        _ observed: CairnPermissionState,
+        bundleID: String
+    ) -> CairnPermissionState {
+        rememberAutomationState(observed, bundleID: bundleID)
+        return AutomationPermissionProbe.reconcile(
+            observed: observed,
+            knownDenied: deniedAutomationBundleIDs.contains(bundleID)
+        )
+    }
+
+    private func setState(
+        _ state: CairnPermissionState,
+        for kind: AutomationAccess.Kind
+    ) {
+        switch kind {
+        case .terminal:
+            terminalState = state
+        case .iterm:
+            itermState = state
+        case .browser:
+            browserState = state
         }
     }
 
@@ -567,25 +680,31 @@ private struct PermissionWelcomeView: View {
                 Image(nsImage: CairnMenuBarIcon.shared)
                     .resizable()
                     .frame(width: 26, height: 26)
-                Text("Cairn is ready")
+                Text(L10n.string("access.welcome.ready"))
                     .font(.title2.weight(.semibold))
             }
 
-            Text("Completed agent turns can appear without extra access.")
+            Text(L10n.string("access.welcome.no_extra_access"))
                 .foregroundStyle(.secondary)
 
-            Label("No screen recording or keyboard monitoring", systemImage: "hand.raised")
+            Label(
+                L10n.string("access.welcome.no_monitoring"),
+                systemImage: "hand.raised"
+            )
                 .font(.subheadline)
-            Label("Enable precise return when you want it", systemImage: "arrow.uturn.backward")
+            Label(
+                L10n.string("access.welcome.precise_return"),
+                systemImage: "arrow.uturn.backward"
+            )
                 .font(.subheadline)
 
             Spacer()
 
             HStack {
                 Spacer()
-                Button("Later", action: onLater)
+                Button(L10n.string("access.welcome.later"), action: onLater)
                     .keyboardShortcut(.cancelAction)
-                Button("Review Access", action: onReview)
+                Button(L10n.string("access.welcome.review"), action: onReview)
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
             }
@@ -603,9 +722,9 @@ private struct PermissionCenterView: View {
             VStack(alignment: .leading, spacing: Cairn.Space.xl) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: Cairn.Space.xs) {
-                        Text("Precise return")
+                        Text(L10n.string("access.title"))
                             .font(.title2.weight(.semibold))
-                        Text("Cairn works without extra access.")
+                        Text(L10n.string("access.subtitle"))
                             .foregroundStyle(.secondary)
                     }
 
@@ -615,13 +734,13 @@ private struct PermissionCenterView: View {
                         Image(systemName: "arrow.clockwise")
                     }
                     .buttonStyle(.borderless)
-                    .help("Refresh")
+                    .help(L10n.string("access.refresh"))
                 }
 
                 PermissionAccessRow(
                     icon: "macwindow",
-                    title: "Editor windows",
-                    detail: "Uses Accessibility to raise the right window.",
+                    title: L10n.string("access.editor.title"),
+                    detail: L10n.string("access.editor.detail"),
                     presentation: experience.accessibilityPresentation,
                     action: experience.requestAccessibility
                 )
@@ -630,14 +749,14 @@ private struct PermissionCenterView: View {
 
                 automationRow(
                     icon: "terminal",
-                    title: "Terminal tabs",
-                    detail: "Uses Automation to return to the exact tab.",
+                    title: L10n.string("access.terminal.title"),
+                    detail: L10n.string("access.terminal.detail"),
                     kind: .terminal
                 )
                 automationRow(
                     icon: "rectangle.split.2x1",
-                    title: "iTerm2 sessions",
-                    detail: "Uses Automation to return to the exact session.",
+                    title: L10n.string("access.iterm.title"),
+                    detail: L10n.string("access.iterm.detail"),
                     kind: .iterm
                 )
 
@@ -645,14 +764,14 @@ private struct PermissionCenterView: View {
                     automationRow(
                         icon: browser.icon,
                         title: browser.title,
-                        detail: "Uses Automation to reuse the matching tab.",
+                        detail: L10n.string("access.browser.detail"),
                         kind: .browser
                     )
                 } else {
                     PermissionAccessRow(
                         icon: "globe",
-                        title: "Browser tabs",
-                        detail: "Current browser is not supported.",
+                        title: L10n.string("access.browser.title"),
+                        detail: L10n.string("access.browser.unsupported"),
                         presentation: .permission(.unavailable),
                         action: {}
                     )
@@ -661,11 +780,18 @@ private struct PermissionCenterView: View {
                 Divider()
 
                 Label(
-                    "No screen recording, input monitoring, or notification access.",
+                    L10n.string("access.privacy_summary"),
                     systemImage: "lock.shield"
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+                HStack {
+                    Spacer()
+                    Text(CairnBuildInfo.displayVersion)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(Cairn.Ink.tertiary)
+                }
             }
             .padding(Cairn.Space.xxl)
         }
@@ -726,8 +852,8 @@ private struct PermissionAccessRow: View {
                         Image(systemName: "gearshape")
                     }
                     .buttonStyle(.borderless)
-                    .help("Open Settings")
-                    .accessibilityLabel("Settings")
+                    .help(L10n.string("access.open_settings"))
+                    .accessibilityLabel(L10n.string("access.settings"))
                 } else {
                     Button(accessAction.title, action: action)
                         .buttonStyle(.bordered)

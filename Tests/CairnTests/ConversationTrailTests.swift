@@ -6,7 +6,8 @@ import Testing
 private func completion(
     source: String? = "codex",
     event: String = "codex.turn.completed",
-    sessionID: String = "019f9fe6-41d4-7d73-878c-255e57907727"
+    sessionID: String = "019f9fe6-41d4-7d73-878c-255e57907727",
+    platform: String? = nil
 ) -> CodexCompletion {
     CodexCompletion(
         id: "completion",
@@ -22,8 +23,21 @@ private func completion(
         source: source,
         userMessage: nil,
         model: nil,
-        platform: nil,
+        platform: platform,
         locator: nil
+    )
+}
+
+@Test
+func buildInfoFormatsVersionAndBuildNumber() {
+    #expect(
+        CairnBuildInfo.displayVersion(
+            from: [
+                "CFBundleShortVersionString": "0.6.3",
+                "CFBundleVersion": "15",
+            ],
+            localeIdentifier: "en"
+        ) == "Version 0.6.3 (15)"
     )
 }
 
@@ -31,6 +45,22 @@ private func completion(
 func codexCompletionBuildsConversationDeepLink() {
     let url = ConversationTrail.codexThreadURL(for: completion())
     #expect(url?.absoluteString == "codex://threads/019f9fe6-41d4-7d73-878c-255e57907727")
+}
+
+@Test
+func hermesDesktopCompletionBuildsConversationDeepLink() {
+    let url = ConversationTrail.hermesSessionURL(
+        for: completion(source: "hermes", sessionID: "20260727_123456_abcd", platform: "desktop")
+    )
+    #expect(url?.absoluteString == "hermes://session/20260727_123456_abcd")
+}
+
+@Test
+func hermesNonDesktopCompletionDoesNotBuildConversationDeepLink() {
+    let url = ConversationTrail.hermesSessionURL(
+        for: completion(source: "hermes", sessionID: "20260727_123456_abcd", platform: "tui")
+    )
+    #expect(url == nil)
 }
 
 @Test
@@ -90,7 +120,30 @@ func recognizesBothCurrentDesktopBundleNames() {
 }
 
 @Test
+func browserTabOriginsIncludeBothLoopbackSpellings() throws {
+    let url = try #require(URL(string: "http://127.0.0.1:18789/chat?session=abc"))
+    #expect(
+        TrailFinder.tabMatchOrigins(for: url)
+            == [
+                "http://127.0.0.1:18789",
+                "http://localhost:18789",
+            ]
+    )
+}
+
+@Test
+func browserTabOriginsPreserveSchemeHostAndPortOnly() throws {
+    let url = try #require(URL(string: "https://openclaw.example:8443/chat/thread"))
+    #expect(
+        TrailFinder.tabMatchOrigins(for: url)
+            == ["https://openclaw.example:8443"]
+    )
+}
+
+@Test
 func automationPermissionStatusesMapToUserFacingStates() {
+    #expect(AutomationPermissionProbe.eventClass == AEEventClass(kAECoreSuite))
+    #expect(AutomationPermissionProbe.eventID == AEEventID(kAEGetData))
     #expect(AutomationPermissionProbe.classify(noErr) == .granted)
     #expect(
         AutomationPermissionProbe.classify(OSStatus(errAEEventWouldRequireUserConsent))
@@ -102,6 +155,18 @@ func automationPermissionStatusesMapToUserFacingStates() {
     )
     #expect(AutomationPermissionProbe.classify(OSStatus(procNotFound)) == .unavailable)
     #expect(AutomationPermissionProbe.classify(-9999) == .unavailable)
+}
+
+@Test
+func recordedAutomationDenialWinsOverAnAmbiguousPreflight() {
+    #expect(
+        AutomationPermissionProbe.reconcile(observed: .notRequested, knownDenied: true)
+            == .needsSettings
+    )
+    #expect(
+        AutomationPermissionProbe.reconcile(observed: .granted, knownDenied: true)
+            == .granted
+    )
 }
 
 @Test

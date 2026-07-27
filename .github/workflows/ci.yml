@@ -43,6 +43,10 @@ jobs:
             cairn_locator.py \
             cairn_save.py \
             AppIcon.icns \
+            Cairn_Cairn.bundle \
+            en.lproj/InfoPlist.strings \
+            zh-Hans.lproj/InfoPlist.strings \
+            ja.lproj/InfoPlist.strings \
             AgentSkills \
             HermesPlugin \
             OpenClawPlugin
@@ -53,6 +57,15 @@ jobs:
             fi
           done
           test -f dist/Cairn.app/Contents/Info.plist
+          for localization in en ja zh-hans; do
+            test -f "$resources/Cairn_Cairn.bundle/$localization.lproj/Localizable.strings"
+          done
+          for strings in \
+            "$resources"/Cairn_Cairn.bundle/*.lproj/*.strings \
+            "$resources"/*.lproj/InfoPlist.strings
+          do
+            plutil -lint "$strings"
+          done
           echo "Bundle layout OK"
 
   python:

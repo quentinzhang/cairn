@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Cairn",
+    defaultLocalization: "en",
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "cairn", targets: ["Cairn"])
@@ -10,7 +11,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "Cairn",
-            path: "Sources/Cairn"
+            path: "Sources/Cairn",
+            resources: [
+                .process("Resources")
+            ]
         ),
         .testTarget(
             name: "CairnTests",

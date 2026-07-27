@@ -1,0 +1,82 @@
+"common.unknown" = "不明";
+"common.agent" = "エージェント";
+"build.version_format" = "バージョン %@（%@）";
+
+"listener.starting" = "起動中…";
+"listener.watching" = "待機中";
+"listener.inbox_unavailable" = "受信箱を利用できません";
+"listener.inbox_attention" = "受信箱を確認してください";
+
+"control.help.listening" = "Cairnは静かに待機しています";
+"control.help.notes" = "クリックでノートを表示・非表示 · ドラッグで移動";
+"control.accessibility.label" = "Cairnノートコントロール";
+"control.accessibility.expanded" = "展開済み";
+"control.accessibility.collapsed" = "折りたたみ済み";
+
+"note.dismiss" = "このノートを消す";
+"note.follow" = "クリックして実行元へ戻る";
+"menu.quietly_listening" = "静かに待機中";
+"menu.active_notes.one" = "%d件のノート";
+"menu.active_notes.many" = "%d件のノート";
+"menu.no_notes" = "待機中のノートはありません";
+"menu.notes_appear" = "エージェントの完了結果がここに表示されます。";
+"menu.collapse_notes" = "ノートを閉じる";
+"menu.expand_notes" = "ノートを開く";
+"menu.clear" = "すべて消す";
+"menu.access" = "アクセス";
+"menu.quit" = "Cairnを終了";
+
+"update.available" = "アップデートがあります";
+"update.version_format" = "Cairn %@";
+"update.view" = "表示";
+"update.skip" = "このバージョンをスキップ";
+"update.check" = "アップデートを確認…";
+"update.checking" = "確認中…";
+"update.up_to_date" = "最新バージョンです";
+"update.check_again" = "もう一度確認";
+"update.try_again" = "再試行";
+"update.failed" = "アップデートを確認できませんでした";
+
+"relative.now" = "今";
+"relative.minutes" = "%d分";
+"relative.hours" = "%d時間";
+"relative.days" = "%d日";
+
+"permission.state.checking" = "確認中…";
+"permission.state.on" = "オン";
+"permission.state.optional" = "任意";
+"permission.state.off" = "オフ";
+"permission.state.unavailable" = "利用不可";
+"permission.action.enable" = "有効にする";
+"permission.action.open" = "開く";
+"permission.action.settings" = "設定";
+"permission.application.not_installed" = "未インストール";
+"permission.application.not_needed" = "まだ不要";
+
+"access.window.welcome" = "Cairnへようこそ";
+"access.window.title" = "Cairnのアクセス";
+"access.welcome.ready" = "Cairnの準備ができました";
+"access.welcome.no_extra_access" = "追加アクセスなしで完了結果を表示できます。";
+"access.welcome.no_monitoring" = "画面収録やキーボード監視はしません";
+"access.welcome.precise_return" = "必要なときだけ正確な復帰を有効にできます";
+"access.welcome.later" = "あとで";
+"access.welcome.review" = "アクセスを確認";
+"access.title" = "正確な復帰";
+"access.subtitle" = "追加アクセスなしでもCairnは動作します。";
+"access.refresh" = "更新";
+"access.editor.title" = "エディタウインドウ";
+"access.editor.detail" = "アクセシビリティを使って正しいウインドウを前面にします。";
+"access.terminal.title" = "Terminalのタブ";
+"access.terminal.short_detail" = "正確なタブへ戻ります。";
+"access.terminal.detail" = "オートメーションを使って正確なタブへ戻ります。";
+"access.iterm.title" = "iTerm2セッション";
+"access.iterm.short_detail" = "正確なセッションへ戻ります。";
+"access.iterm.detail" = "オートメーションを使って正確なセッションへ戻ります。";
+"access.browser.dynamic_title" = "%@のタブ";
+"access.browser.short_detail" = "一致するタブを再利用します。";
+"access.browser.detail" = "オートメーションを使って一致するタブを再利用します。";
+"access.browser.title" = "ブラウザのタブ";
+"access.browser.unsupported" = "現在のブラウザには対応していません。";
+"access.privacy_summary" = "画面収録、入力監視、通知へのアクセスは不要です。";
+"access.open_settings" = "設定を開く";
+"access.settings" = "設定";

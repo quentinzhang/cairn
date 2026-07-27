@@ -95,6 +95,9 @@ CAIRN_SIGN_IDENTITY="$sign_identity" "$root/Scripts/build_app.sh"
 
 log "Verifying signature"
 codesign --verify --deep --strict --verbose=2 "$app"
+codesign -d --entitlements :- "$app" 2>/dev/null |
+  grep -q '<key>com.apple.security.automation.apple-events</key>' || \
+  die "Signed app is missing the Apple Events entitlement."
 codesign -dv --verbose=4 "$app" 2>&1 | \
   sed -n '/^Identifier=/p;/^CodeDirectory/p;/^Authority=/p;/^TeamIdentifier=/p;/^Timestamp=/p'
 
