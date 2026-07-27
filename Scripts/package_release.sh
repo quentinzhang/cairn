@@ -5,10 +5,10 @@ set -euo pipefail
 # and a Gatekeeper assessment of every artifact before any of it is reported as
 # ready. Nothing here is publishable until spctl accepts it.
 #
-# Credentials live in a notarytool keychain profile, created once with
-#   xcrun notarytool store-credentials <name> --apple-id <id> --team-id <team>
-# The profile belongs to the Apple Developer *account*, not to this app, so a
-# profile created for another app on the same team works unchanged.
+# Credentials can come from either a notarytool keychain profile or an
+# App Store Connect API key already exposed through ASC_KEY_PATH, ASC_KEY_ID,
+# and ASC_ISSUER_ID. The latter avoids copying an existing private key into
+# another persistent keychain item.
 #
 # Two artifacts, on purpose:
 #   .zip  stapled, signature-preserving (ditto), what an updater downloads
@@ -30,6 +30,8 @@ Usage: ./Scripts/package_release.sh [options]
   --version <semver>       Set CFBundleShortVersionString before building.
   --build <number>         Set CFBundleVersion before building.
   --notary-profile <name>  notarytool keychain profile. Or set CAIRN_NOTARY_PROFILE.
+                           Alternatively set ASC_KEY_PATH, ASC_KEY_ID, and
+                           ASC_ISSUER_ID for API-key authentication.
   --sign-identity <name>   Developer ID identity. Or set CAIRN_SIGN_IDENTITY.
   --skip-notarization      Build and sign only. Produces artifacts Gatekeeper
                            will reject — for verifying the pipeline, never for
@@ -62,16 +64,27 @@ for tool in codesign ditto hdiutil shasum spctl xcrun /usr/libexec/PlistBuddy; d
   command -v "$tool" >/dev/null 2>&1 || die "Missing required command: $tool"
 done
 
-(( skip_notarization )) || [[ -n "$notary_profile" ]] || \
-  die "Set --notary-profile (or CAIRN_NOTARY_PROFILE) to a notarytool keychain profile."
+notary_arguments=()
+if [[ -n "$notary_profile" ]]; then
+  notary_arguments=(--keychain-profile "$notary_profile")
+elif [[ -n "${ASC_KEY_PATH:-}" && -n "${ASC_KEY_ID:-}" && -n "${ASC_ISSUER_ID:-}" ]]; then
+  [[ -f "$ASC_KEY_PATH" ]] || die "ASC_KEY_PATH does not point to a file."
+  notary_arguments=(
+    --key "$ASC_KEY_PATH"
+    --key-id "$ASC_KEY_ID"
+    --issuer "$ASC_ISSUER_ID"
+  )
+elif (( ! skip_notarization )); then
+  die "Set a notary profile or ASC_KEY_PATH, ASC_KEY_ID, and ASC_ISSUER_ID."
+fi
 
 security find-identity -v -p codesigning | grep -qF "$sign_identity" || \
   die "Developer ID identity not found: $sign_identity"
 
 # Fail before a five-minute build rather than at the upload.
 if (( ! skip_notarization )); then
-  xcrun notarytool history --keychain-profile "$notary_profile" >/dev/null 2>&1 || \
-    die "notarytool profile '$notary_profile' is missing or its credentials are invalid."
+  xcrun notarytool history "${notary_arguments[@]}" >/dev/null 2>&1 || \
+    die "Notary credentials are missing or invalid."
 fi
 
 [[ -n "$new_version" ]] && \
@@ -110,7 +123,7 @@ else
   # ditto -c -k --keepParent is the only archiver that preserves a bundle's
   # signature and extended attributes intact.
   ditto -c -k --keepParent "$app" "$submission"
-  xcrun notarytool submit "$submission" --keychain-profile "$notary_profile" --wait
+  xcrun notarytool submit "$submission" "${notary_arguments[@]}" --wait
 
   log "Stapling the ticket to the app"
   # Staple before packaging, so both artifacts carry the ticket and validate
@@ -131,7 +144,7 @@ codesign --force --timestamp --sign "$sign_identity" "$dmg"
 
 if (( ! skip_notarization )); then
   log "Notarizing the DMG"
-  xcrun notarytool submit "$dmg" --keychain-profile "$notary_profile" --wait
+  xcrun notarytool submit "$dmg" "${notary_arguments[@]}" --wait
   xcrun stapler staple "$dmg"
   xcrun stapler validate "$dmg"
   spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"

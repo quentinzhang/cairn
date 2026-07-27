@@ -22,6 +22,9 @@ jobs:
       - name: Swift version
         run: swift --version
 
+      - name: Validate release scripts
+        run: zsh -n Scripts/build_app.sh Scripts/package_release.sh Scripts/release.sh
+
       - run: swift build
       - run: swift test
 

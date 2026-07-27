@@ -22,6 +22,8 @@ Usage: ./Scripts/release.sh --version <semver> [options]
   --build <number>         Bundle build number. Defaults to the next build.
   --notes-file <path>      Markdown release notes. GitHub generates notes when omitted.
   --notary-profile <name>  notarytool keychain profile. Or set CAIRN_NOTARY_PROFILE.
+                           Alternatively set ASC_KEY_PATH, ASC_KEY_ID, and
+                           ASC_ISSUER_ID for API-key authentication.
   --sign-identity <name>   Developer ID identity. Or set CAIRN_SIGN_IDENTITY.
   --repo <owner/name>      GitHub repository. Defaults to quentinzhang/cairn.
   --help
@@ -51,8 +53,10 @@ done
 [[ -n "$version" ]] || die "--version is required."
 [[ "$version" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' ]] || \
   die "--version must contain exactly three numeric components, such as 0.7.0."
-[[ -n "$notary_profile" ]] || \
-  die "Set --notary-profile (or CAIRN_NOTARY_PROFILE) to a notarytool keychain profile."
+if [[ -z "$notary_profile" ]]; then
+  [[ -n "${ASC_KEY_PATH:-}" && -n "${ASC_KEY_ID:-}" && -n "${ASC_ISSUER_ID:-}" ]] || \
+    die "Set a notary profile or ASC_KEY_PATH, ASC_KEY_ID, and ASC_ISSUER_ID."
+fi
 [[ -z "$notes_file" || -f "$notes_file" ]] || die "Release notes file not found: $notes_file"
 
 for tool in git gh swift node /usr/bin/python3 /usr/libexec/PlistBuddy shasum; do
@@ -148,11 +152,13 @@ node --input-type=module -e '
 node --test OpenClawPlugin/index.test.js
 
 log "Signing, notarizing and stapling release artifacts"
-"$root/Scripts/package_release.sh" \
-  --version "$version" \
-  --build "$build" \
-  --notary-profile "$notary_profile" \
+package_arguments=(
+  --version "$version"
+  --build "$build"
   --sign-identity "$sign_identity"
+)
+[[ -n "$notary_profile" ]] && package_arguments+=(--notary-profile "$notary_profile")
+"$root/Scripts/package_release.sh" "${package_arguments[@]}"
 
 archive="$root/dist/Cairn-$version-mac.zip"
 dmg="$root/dist/Cairn-$version.dmg"

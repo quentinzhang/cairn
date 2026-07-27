@@ -37,6 +37,18 @@ Set the profile name once in the shell that performs releases:
 export CAIRN_NOTARY_PROFILE=cairn-notary
 ```
 
+As an alternative, use an existing App Store Connect API key without creating
+another keychain item:
+
+```bash
+export ASC_KEY_PATH=/absolute/path/to/AuthKey_KEYID.p8
+export ASC_KEY_ID=KEYID
+export ASC_ISSUER_ID=ISSUER_UUID
+```
+
+The release scripts accept either authentication method and never copy or
+print the API key.
+
 The default signing identity is:
 
 ```text
