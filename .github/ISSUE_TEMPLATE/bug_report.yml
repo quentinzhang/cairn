@@ -1,0 +1,80 @@
+name: Bug report
+description: Something in Cairn does not work
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Run the doctor first.** Most "notes stopped arriving" reports have a
+        cause it already detects and tells you how to fix:
+
+        ```bash
+        python3 Scripts/cairn_doctor.py
+        ```
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: cairn_doctor.py output
+      description: >
+        Paste the full output. It is designed to be safe to share — it contains
+        no note bodies, no prompts, and no absolute paths outside the checkout
+        (your home directory shows as `~`). Read it over before posting anyway.
+      render: text
+      placeholder: python3 Scripts/cairn_doctor.py
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Which agent runtime
+      multiple: true
+      options:
+        - Codex CLI
+        - Codex / ChatGPT desktop app
+        - Claude Code
+        - Hermes
+        - OpenClaw
+        - Another producer I wrote myself
+        - Not runtime-specific
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Cairn version
+      description: Menu bar → version, or CFBundleShortVersionString in Contents/Info.plist.
+      placeholder: "0.6.0"
+    validations:
+      required: true
+
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal or host app
+      description: >
+        Required for anything about clicking a note (trail-back / 寻迹) — that
+        path depends heavily on the host. Include the version if you have it.
+      placeholder: iTerm2 3.5.x, Apple Terminal, VS Code, Codex desktop app…
+
+  - type: checkboxes
+    id: checked
+    attributes:
+      label: Before filing
+      options:
+        - label: The doctor's output above shows no ✗ lines, or it does and its suggested fix did not help.
+          required: true
+        - label: For Codex — I have trusted the Cairn hook via `/hooks`. The doctor cannot see trust state.
+          required: false
+        - label: I checked existing issues.
+          required: false

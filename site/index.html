@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cairn 跡 — Every finish leaves a trace</title>
+<meta name="description" content="A quiet macOS companion for your coding agents. When a turn completes, Cairn leaves a small floating note. No dock icon, no notifications, no interruptions.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2.2' y='22.15' width='27.6' height='7.1' rx='3.55' fill='%23758D8E' transform='rotate(-2 16 25.7)'/%3E%3Crect x='6.95' y='13.1' width='19.5' height='6.4' rx='3.2' fill='%232A9284' transform='rotate(4 16.7 16.3)'/%3E%3Cellipse cx='15.3' cy='6.5' rx='4.05' ry='3.9' fill='%23C9E9A8'/%3E%3C/svg%3E">
+<style>
+/* ------------------------------------------------------------------
+   Cairn 跡 — tokens lifted from Sources/Cairn/DesignSystem.swift
+   ------------------------------------------------------------------ */
+:root {
+  --stone-00: #F5F6F2;
+  --stone-10: #D4D6C2;
+  --stone-30: #738C82;
+  --stone-40: #638080;
+  --stone-60: #2B474A;
+  --stone-80: #143638;
+  --stone-90: #0D1F24;
+
+  --jade:       #1A9E8A;
+  --jade-light: #2A9284;
+  --jade-deep:  #135B54;
+
+  /* Mark faces. These belong to the stone mark, not to interface chrome.
+     The crown is the lit stone, so it is the one face that has to be
+     re-read for the ground it lands on: pale on the dark tile, deeper here
+     so the silhouette still holds against near-white. */
+  --stone-lit:  #758D8E;
+  --stone-shade:#3C5659;
+  --crown-lit:  #B7DE93;
+  --crown-shade:#45895A;
+  --beacon:     #F0FADD;
+  --beacon-glow:#8FDC8A;
+  --beacon-glow-alpha: .16;
+
+  --ground: var(--stone-00);
+  --ink:    var(--stone-90);
+  --ink-2:  #46605C;                 /* stone-biased secondary */
+  --ink-3:  #7C918B;
+  --hairline: rgba(13, 31, 36, .12);
+  --card-ground: #FDFDFB;
+  --watermark: rgba(13, 31, 36, .045);
+  --accent: var(--jade);
+  --accent-ink: #0E6B5C;
+
+  /* agent tones — light-scheme rail / label values */
+  --codex-rail:  #148C7A;  --codex-label:  #0E6B5C;  --codex-hue: #148C7A;
+  --hermes-rail: #7A4FD6;  --hermes-label: #6541C4;  --hermes-hue: #8059DB;
+  --claude-rail: #C75C40;  --claude-label: #A8442C;  --claude-hue: #C75C40;
+  --claw-rail:   #1F78BF;  --claw-label:   #1A5F97;  --claw-hue:  #1F78BF;
+
+  --wash-pct: 8%;
+  --shadow-note: 0 6px 12px rgba(13, 31, 36, .10);
+  --shadow-control: 0 5px 9px rgba(13, 31, 36, .22);
+
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+          "Hiragino Sans", "PingFang SC", "Microsoft YaHei", "Yu Gothic", sans-serif;
+  --mono: ui-monospace, "SF Mono", "Menlo", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: var(--stone-90);
+    --ink:    var(--stone-00);
+    --ink-2:  #9FB4AC;
+    --ink-3:  #5F7570;
+    --hairline: rgba(245, 246, 242, .12);
+    --card-ground: #16282C;
+    --watermark: rgba(245, 246, 242, .05);
+    --accent: #1FB89E;
+    --accent-ink: #3FD6BA;
+
+    --codex-rail:  #1FBFA3;  --codex-label:  #3FD6BA;
+    --hermes-rail: #9B78EE;  --hermes-label: #A98CF5;
+    --claude-rail: #DE7050;  --claude-label: #E8886A;
+    --claw-rail:   #3E96D8;  --claw-label:   #5CACE8;
+
+    /* On a dark ground the crown reads lit again, matching the app icon. */
+    --crown-lit:  #DCEFBB;
+    --crown-shade:#7FBF86;
+    --beacon-glow-alpha: .42;
+
+    --wash-pct: 13%;
+    --shadow-note: 0 6px 14px rgba(0, 0, 0, .35);
+    --shadow-control: 0 5px 11px rgba(0, 0, 0, .45);
+  }
+}
+
+:root[data-theme="light"] {
+  --ground: var(--stone-00);
+  --ink:    var(--stone-90);
+  --ink-2:  #46605C;
+  --ink-3:  #7C918B;
+  --hairline: rgba(13, 31, 36, .12);
+  --card-ground: #FDFDFB;
+  --watermark: rgba(13, 31, 36, .045);
+  --accent: var(--jade);
+  --accent-ink: #0E6B5C;
+  --codex-rail:  #148C7A;  --codex-label:  #0E6B5C;
+  --hermes-rail: #7A4FD6;  --hermes-label: #6541C4;
+  --claude-rail: #C75C40;  --claude-label: #A8442C;
+  --claw-rail:   #1F78BF;  --claw-label:   #1A5F97;
+  --crown-lit:  #B7DE93;
+  --crown-shade:#45895A;
+  --beacon-glow-alpha: .16;
+  --wash-pct: 8%;
+  --shadow-note: 0 6px 12px rgba(13, 31, 36, .10);
+  --shadow-control: 0 5px 9px rgba(13, 31, 36, .22);
+}
+
+:root[data-theme="dark"] {
+  --ground: var(--stone-90);
+  --ink:    var(--stone-00);
+  --ink-2:  #9FB4AC;
+  --ink-3:  #5F7570;
+  --hairline: rgba(245, 246, 242, .12);
+  --card-ground: #16282C;
+  --watermark: rgba(245, 246, 242, .05);
+  --accent: #1FB89E;
+  --accent-ink: #3FD6BA;
+  --codex-rail:  #1FBFA3;  --codex-label:  #3FD6BA;
+  --hermes-rail: #9B78EE;  --hermes-label: #A98CF5;
+  --claude-rail: #DE7050;  --claude-label: #E8886A;
+  --claw-rail:   #3E96D8;  --claw-label:   #5CACE8;
+  --crown-lit:  #DCEFBB;
+  --crown-shade:#7FBF86;
+  --beacon-glow-alpha: .42;
+  --wash-pct: 13%;
+  --shadow-note: 0 6px 14px rgba(0, 0, 0, .35);
+  --shadow-control: 0 5px 11px rgba(0, 0, 0, .45);
+}
+
+/* ------------------------------------------------------------------ */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--sans);
+  background: var(--ground);
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  transition: background .3s ease, color .3s ease;
+}
+
+::selection { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+
+a { color: inherit; }
+
+/* ---- nav ---------------------------------------------------------- */
+
+nav {
+  position: fixed;
+  inset: 0 0 auto 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 22px clamp(20px, 4vw, 44px);
+  z-index: 10;
+}
+
+.nav-mark {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  text-decoration: none;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ground) 72%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+/* `Cairn` is the wordmark on every surface; the seal is never set inline
+   beside it — see docs/design-system.md §1. Putting 跡/迹 next to the name
+   asks an English reader what it is and how to say it, and buys nothing:
+   the seal is already the largest thing in the hero, behind the type. */
+
+.lang {
+  display: flex;
+  gap: 2px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 3px;
+  background: color-mix(in srgb, var(--ground) 72%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.lang button {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+  background: none;
+  border: none;
+  border-radius: 999px;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: color .15s, background .15s;
+}
+.lang button:hover { color: var(--ink); }
+.lang button[aria-pressed="true"] {
+  color: var(--ground);
+  background: var(--ink);
+}
+.lang button:focus-visible,
+.cta:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---- hero --------------------------------------------------------- */
+
+header {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  padding: 96px 24px 64px;
+}
+
+.watermark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -54%);
+  font-size: clamp(300px, 58vmin, 560px);
+  font-weight: 600;
+  color: var(--watermark);
+  user-select: none;
+  pointer-events: none;
+  line-height: 1;
+  z-index: 0;
+  animation: breathe-in 2.4s ease-out both;
+}
+
+.hero-inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
+
+/* the stone mark */
+.stones { width: 108px; height: 118px; margin-bottom: 34px; }
+.stones .settle { animation: settle .9s cubic-bezier(.22, 1.2, .36, 1) both; }
+.stones .s-base   { animation-delay: .10s; }
+.stones .s-mid    { animation-delay: .28s; }
+.stones .s-crown  { animation-delay: .46s; }
+.stones .s-beacon { animation: beacon 1.4s ease .8s both; }
+
+h1 {
+  font-size: clamp(38px, 6vw, 54px);
+  font-weight: 650;
+  letter-spacing: -.01em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.tagline {
+  margin-top: 18px;
+  font-size: clamp(17px, 2.4vw, 21px);
+  font-weight: 400;
+  color: var(--ink-2);
+  letter-spacing: .01em;
+}
+
+.sub {
+  margin-top: 26px;
+  max-width: 34em;
+  font-size: 15px;
+  color: var(--ink-3);
+  line-height: 1.85;
+}
+
+.cta-row {
+  margin-top: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.cta {
+  display: inline-block;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  color: #FFFFFF;
+  background: var(--accent);
+  text-decoration: none;
+  padding: 13px 34px;
+  border-radius: 999px;
+  transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--jade) 30%, transparent);
+}
+.cta:hover {
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+  transform: translateY(-1px);
+  box-shadow: 0 7px 20px color-mix(in srgb, var(--jade) 38%, transparent);
+}
+
+.cta-note {
+  font-size: 12px;
+  color: var(--ink-3);
+  letter-spacing: .04em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- shared section rhythm ---------------------------------------- */
+
+main { position: relative; z-index: 1; }
+
+section {
+  padding: clamp(72px, 12vh, 128px) 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.divider {
+  display: flex;
+  justify-content: center;
+  padding-bottom: clamp(48px, 8vh, 84px);
+}
+.divider svg { fill: var(--ink-3); }
+
+/* ---- product vignette --------------------------------------------- */
+
+.vignette {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.queue {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(384px, 88vw);
+  overflow: hidden;
+}
+.note {
+  transition: margin-top .5s cubic-bezier(.2, .7, .3, 1), opacity .5s ease, transform .5s ease;
+}
+.note.exit { opacity: 0; transform: translateY(12px) scale(.98); }
+
+.note {
+  background:
+    linear-gradient(color-mix(in srgb, var(--note-hue) var(--wash-pct), transparent),
+                    color-mix(in srgb, var(--note-hue) var(--wash-pct), transparent)),
+    var(--card-ground);
+  border: 1px solid var(--hairline);
+  border-radius: 18px;
+  padding: 13px 16px 14px 18px;
+  position: relative;
+  box-shadow: var(--shadow-note);
+  text-align: left;
+}
+.note::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 54px;
+  border-radius: 999px;
+  background: var(--note-rail);
+}
+.note-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+.note-agent { font-weight: 600; color: var(--note-label); }
+.note-ctx   { color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-time  { margin-left: auto; color: var(--ink-3); font-family: var(--mono); font-size: 11px; }
+.note-x {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink-3);
+  font-size: 9px;
+  display: flex; align-items: center; justify-content: center;
+  align-self: center;
+}
+.note-prompt {
+  margin-top: 7px;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.note-result {
+  margin-top: 4px;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--ink) 82%, transparent);
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.note.codex  { --note-hue: var(--codex-hue);  --note-rail: var(--codex-rail);  --note-label: var(--codex-label); }
+.note.hermes { --note-hue: var(--hermes-hue); --note-rail: var(--hermes-rail); --note-label: var(--hermes-label); }
+.note.claude { --note-hue: var(--claude-hue); --note-rail: var(--claude-rail); --note-label: var(--claude-label); }
+.note.claw   { --note-hue: var(--claw-hue);   --note-rail: var(--claw-rail);   --note-label: var(--claw-label); }
+
+/* the control tile */
+.control {
+  position: relative;
+  width: 58px; height: 66px;
+  border-radius: 22px;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--stone-80) 88%, transparent),
+    color-mix(in srgb, var(--stone-90) 96%, transparent));
+  border: 1px solid rgba(255, 255, 255, .12);
+  box-shadow: var(--shadow-control);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+.control svg { width: 40px; height: 46px; }
+.badge {
+  position: absolute;
+  top: -7px; right: -7px;
+  min-width: 19px; height: 19px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--jade);
+  border: 1px solid rgba(255, 255, 255, .4);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.vignette-caption {
+  margin-top: 40px;
+  font-size: 13px;
+  color: var(--ink-3);
+  text-align: center;
+  max-width: 30em;
+  line-height: 1.8;
+}
+
+/* ---- principles --------------------------------------------------- */
+
+.principles {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(52px, 9vh, 92px);
+  max-width: 400px;
+  text-align: center;
+}
+
+.principle h2 {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: .06em;
+}
+.principle p {
+  margin-top: 12px;
+  font-size: 14.5px;
+  color: var(--ink-3);
+  line-height: 1.9;
+}
+
+/* ---- agents ------------------------------------------------------- */
+
+.agents {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px 34px;
+  align-items: center;
+}
+.agents-label {
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: .18em;
+  color: var(--ink-3);
+  margin-bottom: 14px;
+}
+.agent {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.agent i { width: 8px; height: 8px; border-radius: 50%; display: block; }
+.agent.codex i  { background: var(--codex-rail); }
+.agent.hermes i { background: var(--hermes-rail); }
+.agent.claude i { background: var(--claude-rail); }
+.agent.claw i   { background: var(--claw-rail); }
+
+/* ---- footer ------------------------------------------------------- */
+
+footer {
+  border-top: 1px solid var(--hairline);
+  padding: 40px 24px 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+.foot-mark { font-size: 14px; font-weight: 600; }
+footer p, footer a {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  text-decoration: none;
+}
+footer a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---- motion ------------------------------------------------------- */
+
+@keyframes settle {
+  from { transform: translateY(-14px); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+@keyframes beacon {
+  from { opacity: 0; }
+  60%  { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes breathe-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes rise {
+  from { transform: translateY(18px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.hero-inner > * { animation: rise .8s cubic-bezier(.2, .7, .3, 1) both; }
+.hero-inner > :nth-child(2) { animation-delay: .12s; }
+.hero-inner > :nth-child(3) { animation-delay: .22s; }
+.hero-inner > :nth-child(4) { animation-delay: .32s; }
+.hero-inner > :nth-child(5) { animation-delay: .42s; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+@media (max-width: 560px) {
+  .vignette { flex-direction: column-reverse; align-items: center; }
+  h1 { font-size: 34px; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-mark" href="#">Cairn</a>
+  <div class="lang" role="group" aria-label="Language">
+    <button type="button" data-lang="en" aria-pressed="true">EN</button>
+    <button type="button" data-lang="zh" aria-pressed="false">中</button>
+    <button type="button" data-lang="ja" aria-pressed="false">日</button>
+  </div>
+</nav>
+
+<header>
+  <span class="watermark brand-cjk" aria-hidden="true">跡</span>
+  <div class="hero-inner">
+
+    <svg class="stones" viewBox="0 0 108 118" role="img" aria-label="Two stacked river stones under a lit crowning stone">
+      <defs>
+        <linearGradient id="g-base" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="var(--stone-lit)"/><stop offset="1" stop-color="var(--stone-shade)"/>
+        </linearGradient>
+        <linearGradient id="g-mid" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="var(--jade-light)"/><stop offset="1" stop-color="var(--jade-deep)"/>
+        </linearGradient>
+        <linearGradient id="g-crown" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="var(--crown-lit)"/><stop offset="1" stop-color="var(--crown-shade)"/>
+        </linearGradient>
+        <radialGradient id="g-glow">
+          <stop offset="0" stop-color="var(--beacon-glow)" stop-opacity="var(--beacon-glow-alpha)"/>
+          <stop offset="1" stop-color="var(--beacon-glow)" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <!-- Stone outlines are a superellipse with a seeded wobble; the same
+           curve is generated in Cairn.Mark.outline and baked in here, because
+           the site cannot import the app's Swift. Regenerate all three
+           together if any of the seeds, sizes or roundness values change. -->
+      <ellipse cx="54" cy="108" rx="38" ry="5.5" fill="currentColor" opacity=".14"/>
+      <g class="settle s-base">
+        <path d="M95.97 95.00L95.95 96.77L95.68 97.95L95.15 98.97L94.36 99.89L93.31 100.72L92.01 101.48L90.45 102.17L88.65 102.79L86.61 103.35L84.34 103.85L81.82 104.28L79.08 104.65L76.08 104.95L72.83 105.20L69.28 105.38L65.34 105.50L60.79 105.56L54.00 105.57L47.24 105.52L42.76 105.41L38.92 105.24L35.49 105.02L32.37 104.75L29.52 104.42L26.91 104.03L24.53 103.59L22.38 103.10L20.44 102.55L18.72 101.94L17.22 101.27L15.94 100.54L14.89 99.74L14.07 98.85L13.49 97.87L13.14 96.72L13.04 95.00L13.17 93.28L13.55 92.14L14.17 91.15L15.02 90.28L16.11 89.49L17.43 88.77L18.98 88.11L20.75 87.52L22.74 86.99L24.94 86.53L27.35 86.11L29.99 85.76L32.84 85.47L35.95 85.23L39.34 85.04L43.10 84.91L47.47 84.83L54.00 84.81L60.53 84.83L64.89 84.91L68.65 85.05L72.04 85.23L75.15 85.47L78.02 85.76L80.67 86.11L83.12 86.51L85.37 86.97L87.42 87.48L89.27 88.06L90.90 88.71L92.33 89.42L93.53 90.21L94.50 91.09L95.24 92.08L95.73 93.24Z"
+              fill="url(#g-base)" transform="rotate(-2 54 95)"/>
+      </g>
+      <g class="settle s-mid">
+        <path d="M84.65 67.00L84.58 68.54L84.35 69.57L83.97 70.45L83.42 71.25L82.72 71.97L81.85 72.64L80.82 73.24L79.63 73.80L78.27 74.30L76.76 74.74L75.07 75.14L73.22 75.47L71.19 75.76L68.98 75.99L66.55 76.16L63.84 76.28L60.70 76.35L56.00 76.36L51.32 76.32L48.21 76.23L45.55 76.08L43.17 75.89L41.01 75.64L39.03 75.35L37.23 75.01L35.57 74.62L34.07 74.18L32.71 73.70L31.50 73.16L30.43 72.58L29.49 71.93L28.70 71.23L28.06 70.45L27.56 69.58L27.22 68.55L27.03 67.00L26.99 65.44L27.12 64.38L27.42 63.47L27.89 62.64L28.53 61.89L29.35 61.19L30.35 60.55L31.53 59.96L32.88 59.43L34.42 58.95L36.14 58.53L38.05 58.17L40.15 57.86L42.46 57.62L44.99 57.43L47.82 57.31L51.10 57.25L56.00 57.24L60.88 57.29L64.10 57.40L66.85 57.57L69.30 57.79L71.50 58.06L73.50 58.39L75.31 58.76L76.95 59.19L78.42 59.66L79.72 60.18L80.87 60.74L81.87 61.36L82.71 62.03L83.41 62.75L83.95 63.55L84.33 64.43L84.57 65.46Z"
+              fill="url(#g-mid)" transform="rotate(4 56 67)"/>
+      </g>
+      <circle class="s-beacon" cx="52" cy="38" r="28.8" fill="url(#g-glow)"/>
+      <g class="settle s-crown">
+        <path d="M63.76 38.00L63.69 39.23L63.55 40.29L63.33 41.28L63.03 42.22L62.66 43.11L62.21 43.95L61.70 44.74L61.13 45.47L60.49 46.16L59.80 46.78L59.05 47.35L58.24 47.86L57.37 48.32L56.45 48.70L55.47 49.03L54.43 49.28L53.30 49.47L52.00 49.58L50.68 49.61L49.51 49.56L48.40 49.43L47.34 49.22L46.32 48.92L45.34 48.53L44.42 48.06L43.56 47.50L42.77 46.87L42.04 46.15L41.40 45.36L40.84 44.50L40.37 43.58L39.99 42.60L39.71 41.56L39.53 40.47L39.44 39.32L39.45 38.00L39.56 36.70L39.76 35.57L40.04 34.53L40.41 33.56L40.85 32.65L41.37 31.81L41.96 31.03L42.61 30.31L43.31 29.66L44.08 29.08L44.89 28.56L45.75 28.11L46.65 27.72L47.60 27.41L48.59 27.16L49.63 26.98L50.73 26.87L52.00 26.83L53.27 26.86L54.37 26.96L55.42 27.14L56.41 27.39L57.36 27.71L58.25 28.11L59.10 28.58L59.89 29.12L60.61 29.73L61.27 30.41L61.86 31.15L62.38 31.95L62.81 32.81L63.17 33.72L63.44 34.68L63.63 35.69L63.74 36.77Z"
+              fill="url(#g-crown)" transform="rotate(-8 52 38)"/>
+        <!-- The lit facet fades in after the crown lands: the stack settles,
+             then the light comes on. -->
+        <ellipse class="s-beacon" cx="50.5" cy="35.4" rx="5.04" ry="3.6"
+                 fill="#F0FADD" fill-opacity=".85"/>
+      </g>
+    </svg>
+
+    <h1>Cairn</h1>
+
+    <p class="tagline" data-i18n="tagline">Every finish leaves a trace.</p>
+
+    <p class="sub" data-i18n="sub">A quiet macOS companion for your coding agents. When Codex, Hermes, Claude Code or OpenClaw completes a turn, Cairn leaves a small floating note — no dock icon, no notifications, no interruptions.</p>
+
+    <div class="cta-row">
+      <a class="cta" href="https://github.com/everflyzhang/cairn/releases/latest" data-i18n="cta">Download for macOS</a>
+      <span class="cta-note">macOS 14+ · Apple Silicon</span>
+    </div>
+
+  </div>
+</header>
+
+<main>
+
+  <section aria-label="Product">
+    <div class="divider" aria-hidden="true">
+      <svg width="168" height="32" viewBox="0 0 168 32">
+        <g transform="translate(10 20) rotate(10)" opacity=".26"><ellipse rx="3.6" ry="2.2"/><circle cx="-6" cy="1.2" r="1.4"/></g>
+        <g transform="translate(32 12) rotate(-10)" opacity=".34"><ellipse rx="3.6" ry="2.2"/><circle cx="-6" cy="-1.2" r="1.4"/></g>
+        <g transform="translate(54 20) rotate(10)" opacity=".42"><ellipse rx="3.6" ry="2.2"/><circle cx="-6" cy="1.2" r="1.4"/></g>
+        <g transform="translate(76 12) rotate(-10)" opacity=".5"><ellipse rx="3.6" ry="2.2"/><circle cx="-6" cy="-1.2" r="1.4"/></g>
+        <g transform="translate(98 20) rotate(10)" opacity=".58"><ellipse rx="3.6" ry="2.2"/><circle cx="-6" cy="1.2" r="1.4"/></g>
+        <g transform="translate(124 5) scale(.72)" opacity=".68">
+          <rect x="2.2" y="22.15" width="27.6" height="7.1" rx="3.55" transform="rotate(-2 16 25.7)"/>
+          <rect x="6.95" y="13.1" width="19.5" height="6.4" rx="3.2" transform="rotate(4 16.7 16.3)"/>
+          <ellipse cx="15.3" cy="6.5" rx="4.05" ry="3.9"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="vignette">
+      <div class="queue" id="queue"></div>
+
+      <div class="control" aria-hidden="true">
+        <span class="badge">2</span>
+        <svg viewBox="0 0 108 118">
+          <ellipse cx="54" cy="108" rx="38" ry="5.5" fill="#000" opacity=".24"/>
+          <path d="M95.97 95.00L95.95 96.77L95.68 97.95L95.15 98.97L94.36 99.89L93.31 100.72L92.01 101.48L90.45 102.17L88.65 102.79L86.61 103.35L84.34 103.85L81.82 104.28L79.08 104.65L76.08 104.95L72.83 105.20L69.28 105.38L65.34 105.50L60.79 105.56L54.00 105.57L47.24 105.52L42.76 105.41L38.92 105.24L35.49 105.02L32.37 104.75L29.52 104.42L26.91 104.03L24.53 103.59L22.38 103.10L20.44 102.55L18.72 101.94L17.22 101.27L15.94 100.54L14.89 99.74L14.07 98.85L13.49 97.87L13.14 96.72L13.04 95.00L13.17 93.28L13.55 92.14L14.17 91.15L15.02 90.28L16.11 89.49L17.43 88.77L18.98 88.11L20.75 87.52L22.74 86.99L24.94 86.53L27.35 86.11L29.99 85.76L32.84 85.47L35.95 85.23L39.34 85.04L43.10 84.91L47.47 84.83L54.00 84.81L60.53 84.83L64.89 84.91L68.65 85.05L72.04 85.23L75.15 85.47L78.02 85.76L80.67 86.11L83.12 86.51L85.37 86.97L87.42 87.48L89.27 88.06L90.90 88.71L92.33 89.42L93.53 90.21L94.50 91.09L95.24 92.08L95.73 93.24Z"
+                fill="url(#g-base)" transform="rotate(-2 54 95)"/>
+          <path d="M84.65 67.00L84.58 68.54L84.35 69.57L83.97 70.45L83.42 71.25L82.72 71.97L81.85 72.64L80.82 73.24L79.63 73.80L78.27 74.30L76.76 74.74L75.07 75.14L73.22 75.47L71.19 75.76L68.98 75.99L66.55 76.16L63.84 76.28L60.70 76.35L56.00 76.36L51.32 76.32L48.21 76.23L45.55 76.08L43.17 75.89L41.01 75.64L39.03 75.35L37.23 75.01L35.57 74.62L34.07 74.18L32.71 73.70L31.50 73.16L30.43 72.58L29.49 71.93L28.70 71.23L28.06 70.45L27.56 69.58L27.22 68.55L27.03 67.00L26.99 65.44L27.12 64.38L27.42 63.47L27.89 62.64L28.53 61.89L29.35 61.19L30.35 60.55L31.53 59.96L32.88 59.43L34.42 58.95L36.14 58.53L38.05 58.17L40.15 57.86L42.46 57.62L44.99 57.43L47.82 57.31L51.10 57.25L56.00 57.24L60.88 57.29L64.10 57.40L66.85 57.57L69.30 57.79L71.50 58.06L73.50 58.39L75.31 58.76L76.95 59.19L78.42 59.66L79.72 60.18L80.87 60.74L81.87 61.36L82.71 62.03L83.41 62.75L83.95 63.55L84.33 64.43L84.57 65.46Z"
+                fill="url(#g-mid)" transform="rotate(4 56 67)"/>
+          <path d="M63.76 38.00L63.69 39.23L63.55 40.29L63.33 41.28L63.03 42.22L62.66 43.11L62.21 43.95L61.70 44.74L61.13 45.47L60.49 46.16L59.80 46.78L59.05 47.35L58.24 47.86L57.37 48.32L56.45 48.70L55.47 49.03L54.43 49.28L53.30 49.47L52.00 49.58L50.68 49.61L49.51 49.56L48.40 49.43L47.34 49.22L46.32 48.92L45.34 48.53L44.42 48.06L43.56 47.50L42.77 46.87L42.04 46.15L41.40 45.36L40.84 44.50L40.37 43.58L39.99 42.60L39.71 41.56L39.53 40.47L39.44 39.32L39.45 38.00L39.56 36.70L39.76 35.57L40.04 34.53L40.41 33.56L40.85 32.65L41.37 31.81L41.96 31.03L42.61 30.31L43.31 29.66L44.08 29.08L44.89 28.56L45.75 28.11L46.65 27.72L47.60 27.41L48.59 27.16L49.63 26.98L50.73 26.87L52.00 26.83L53.27 26.86L54.37 26.96L55.42 27.14L56.41 27.39L57.36 27.71L58.25 28.11L59.10 28.58L59.89 29.12L60.61 29.73L61.27 30.41L61.86 31.15L62.38 31.95L62.81 32.81L63.17 33.72L63.44 34.68L63.63 35.69L63.74 36.77Z"
+                fill="url(#g-crown)" transform="rotate(-8 52 38)"/>
+          <ellipse cx="50.5" cy="35.4" rx="5.04" ry="3.6" fill="#F0FADD" fill-opacity=".85"/>
+        </svg>
+      </div>
+    </div>
+
+    <p class="vignette-caption" data-i18n="vigcap">Notes float beside a small stack of stones. Click the stones to expand or collapse; drag them to a quieter corner of the screen.</p>
+  </section>
+
+  <section aria-label="Principles">
+    <div class="divider" aria-hidden="true">
+      <svg width="168" height="32" viewBox="0 0 168 32">
+        <g transform="translate(10 20) rotate(10)" opacity=".26"><ellipse rx="3.6" ry="2.2"/><circle cx="-6" cy="1.2" r="1.4"/></g>
+        <g transform="translate(32 12) rotate(-10)" opacity=".34"><ellipse rx="3.6" ry="2.2"/><circle cx="-6" cy="-1.2" r="1.4"/></g>
+        <g transform="translate(54 20) rotate(10)" opacity=".42"><ellipse rx="3.6" ry="2.2"/><circle cx="-6" cy="1.2" r="1.4"/></g>
+        <g transform="translate(76 12) rotate(-10)" opacity=".5"><ellipse rx="3.6" ry="2.2"/><circle cx="-6" cy="-1.2" r="1.4"/></g>
+        <g transform="translate(98 20) rotate(10)" opacity=".58"><ellipse rx="3.6" ry="2.2"/><circle cx="-6" cy="1.2" r="1.4"/></g>
+        <g transform="translate(124 5) scale(.72)" opacity=".68">
+          <rect x="2.2" y="22.15" width="27.6" height="7.1" rx="3.55" transform="rotate(-2 16 25.7)"/>
+          <rect x="6.95" y="13.1" width="19.5" height="6.4" rx="3.2" transform="rotate(4 16.7 16.3)"/>
+          <ellipse cx="15.3" cy="6.5" rx="4.05" ry="3.9"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="principles">
+      <div class="principle">
+        <h2 data-i18n="p1t">Never interrupts</h2>
+        <p data-i18n="p1b">Cairn has no window and asks for nothing. It reports that something finished; it never demands that you respond.</p>
+      </div>
+      <div class="principle">
+        <h2 data-i18n="p2t">Everything stacks</h2>
+        <p data-i18n="p2b">Notes queue in one fixed rhythm. Fifty finished turns are scannable in a single glance, and nothing reflows.</p>
+      </div>
+      <div class="principle">
+        <h2 data-i18n="p3t">Everything fades</h2>
+        <p data-i18n="p3b">A note is a trace, and traces are meant to be walked past. One click and it is gone — no confirmation, nothing precious.</p>
+      </div>
+      <div class="principle">
+        <h2 data-i18n="p4t">Traces back</h2>
+        <p data-i18n="p4b">Click a note and Cairn retraces its steps — back to the exact terminal tab, editor window, or session where the turn ran. When it can't find that window, it opens the app instead; failing that, it reveals the folder in Finder.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-label="Agents">
+    <div class="agents">
+      <span class="agents-label" data-i18n="agents">LISTENS TO</span>
+      <span class="agent codex"><i></i>Codex</span>
+      <span class="agent hermes"><i></i>Hermes</span>
+      <span class="agent claude"><i></i>Claude Code</span>
+      <span class="agent claw"><i></i>OpenClaw</span>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <span class="foot-mark">Cairn</span>
+  <p><span data-i18n="foot">Every finish leaves a trace.</span> · © 2026 · <a href="https://github.com/everflyzhang/cairn" data-i18n="gh">GitHub</a> · <a href="https://github.com/everflyzhang/cairn/blob/main/LICENSE">Apache-2.0</a></p>
+</footer>
+
+<script>
+(function () {
+  var I18N = {
+    en: {
+      _lang: "en",
+      _seal: "跡",
+      _sealLang: "ja",
+      _title: "Cairn 跡 — Every finish leaves a trace",
+      tagline: "Every finish leaves a trace.",
+      sub: "A quiet macOS companion for your coding agents. When Codex, Hermes, Claude Code or OpenClaw completes a turn, Cairn leaves a small floating note — no dock icon, no notifications, no interruptions.",
+      cta: "Download for macOS",
+      vigcap: "Notes float beside a small stack of stones. Click the stones to expand or collapse; drag them to a quieter corner of the screen.",
+      p1t: "Never interrupts",
+      p1b: "Cairn has no window and asks for nothing. It reports that something finished; it never demands that you respond.",
+      p2t: "Everything stacks",
+      p2b: "Notes queue in one fixed rhythm. Fifty finished turns are scannable in a single glance, and nothing reflows.",
+      p3t: "Everything fades",
+      p3b: "A note is a trace, and traces are meant to be walked past. One click and it is gone — no confirmation, nothing precious.",
+      p4t: "Traces back",
+      p4b: "Click a note and Cairn retraces its steps — back to the exact terminal tab, editor window, or session where the turn ran. When it can't find that window, it opens the app instead; failing that, it reveals the folder in Finder.",
+      agents: "LISTENS TO",
+      mock3p: "Summarize today's inbox",
+      mock3r: "12 threads triaged — three need a reply, drafts ready.",
+      mock4p: "Fix the failing tests",
+      mock4r: "Two flaky tests stabilized; the suite is green in 41s.",
+      mockNow: "now",
+      mock1p: "Build the design system",
+      mock1r: "Design tokens extracted, contrast verified in both schemes, release build clean.",
+      mock2p: "Migrate the endpoints",
+      mock2r: "Migration complete — 42 endpoints moved, zero regressions.",
+      foot: "Every finish leaves a trace.",
+      gh: "GitHub"
+    },
+    zh: {
+      _lang: "zh-Hans",
+      _seal: "迹",
+      _sealLang: "zh-Hans",
+      _title: "Cairn 迹 — 每完成一次，留一道迹",
+      tagline: "每完成一次，留一道迹。",
+      sub: "一个安静的 macOS 伴侣。当 Codex、Hermes、Claude Code 或 OpenClaw 完成一轮工作，Cairn 便留下一枚小小的浮动便签——没有 Dock 图标，没有系统通知，从不打断你。",
+      cta: "下载 macOS 版",
+      vigcap: "便签浮在一小摞石头旁。点击石堆展开或收起；拖动它，把它放到屏幕上更安静的角落。",
+      p1t: "不打断",
+      p1b: "Cairn 没有窗口，也不索取任何操作。它只报告有事完成了，从不要求你回应。",
+      p2t: "可堆叠",
+      p2b: "便签以固定的节奏排成一列。五十次完成，一眼扫过，没有任何东西会重排。",
+      p3t: "会消退",
+      p3b: "便签是一道迹，而迹本就该被走过。轻轻一点即消失——没有确认框，没有什么舍不得。",
+      p4t: "会寻迹",
+      p4b: "点开一枚便签，它便沿着来路走回去——精确到那一个终端标签页、编辑器窗口，或那一次会话。找不到那扇窗，便唤起那个应用。",
+      agents: "静静聆听",
+      mock3p: "整理今天的收件箱",
+      mock3r: "已梳理 12 个会话——3 个需要回复，草稿已备好。",
+      mock4p: "修复失败的测试",
+      mock4r: "两个不稳定用例已修复，全部通过，用时 41 秒。",
+      mockNow: "刚刚",
+      mock1p: "构建设计系统",
+      mock1r: "设计令牌已抽离，明暗两套对比度全部达标，构建通过。",
+      mock2p: "迁移接口",
+      mock2r: "迁移完成——42 个端点全部就位，零回归。",
+      foot: "每完成一次，留一道迹。",
+      gh: "GitHub"
+    },
+    ja: {
+      _lang: "ja",
+      _seal: "跡",
+      _sealLang: "ja",
+      _title: "Cairn 跡 — 終わりに、跡を。",
+      tagline: "終わりに、跡を。",
+      sub: "コーディングエージェントのための、静かなmacOSコンパニオン。Codex、Hermes、Claude Code、OpenClawがターンを終えると、Cairnは小さなフローティングノートをそっと残します。Dockにも通知にも、現れません。",
+      cta: "macOS版をダウンロード",
+      vigcap: "ノートは、小さな石積みのそばに浮かびます。石をクリックして開閉し、画面の静かな隅へドラッグできます。",
+      p1t: "さえぎらない",
+      p1b: "Cairnにはウィンドウがなく、何も求めません。終わったことを伝えるだけで、応答を要求することはありません。",
+      p2t: "つみかさなる",
+      p2b: "ノートは一定のリズムで積み重なります。50件の完了もひと目で見渡せ、何も動きません。",
+      p3t: "きえてゆく",
+      p3b: "ノートは跡であり、跡は通り過ぎるためのもの。ワンクリックで消えます——確認も、未練もなく。",
+      p4t: "あとをたどる",
+      p4b: "ノートをクリックすると、それが生まれた場所へ跡をたどって戻ります——あの端末のタブ、エディタのウィンドウ、あのセッションへ。見つからなければアプリを開き、それも叶わなければ Finder でありかを示します。",
+      agents: "耳を澄ませて",
+      mock3p: "今日の受信箱を整理",
+      mock3r: "12件のスレッドを整理——3件は要返信、下書き準備済み。",
+      mock4p: "失敗するテストを修正",
+      mock4r: "不安定なテスト2件を安定化。スイートは41秒でグリーン。",
+      mockNow: "今",
+      mock1p: "デザインシステムを構築",
+      mock1r: "トークンを分離し、両テーマのコントラストを検証。ビルドは正常。",
+      mock2p: "エンドポイントを移行",
+      mock2r: "移行完了——42のエンドポイント、リグレッションなし。",
+      foot: "終わりに、跡を。",
+      gh: "GitHub"
+    }
+  };
+
+  var buttons = document.querySelectorAll(".lang button");
+
+  // ---- the floating queue vignette: four agents, two visible, rotating ----
+  var MOCKS = [
+    { cls: "claude", agent: "Claude Code", ctx: "Cairn",      pk: "mock1p", rk: "mock1r" },
+    { cls: "codex",  agent: "Codex",       ctx: "api-server", pk: "mock2p", rk: "mock2r" },
+    { cls: "claw",   agent: "OpenClaw",    ctx: "Telegram",   pk: "mock3p", rk: "mock3r" },
+    { cls: "hermes", agent: "Hermes",      ctx: "Desktop",    pk: "mock4p", rk: "mock4r" }
+  ];
+  var queueEl = document.getElementById("queue");
+  var head = 0;
+  var currentDict = null;
+  var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  function makeNote(mock, dict, time) {
+    var el = document.createElement("div");
+    el.className = "note " + mock.cls;
+    el.innerHTML =
+      '<div class="note-head">' +
+        '<span class="note-agent"></span>' +
+        '<span class="note-ctx"></span>' +
+        '<span class="note-time"></span>' +
+        '<span class="note-x" aria-hidden="true">\u2715</span>' +
+      '</div>' +
+      '<div class="note-prompt"></div>' +
+      '<div class="note-result"></div>';
+    el.querySelector(".note-agent").textContent = mock.agent;
+    el.querySelector(".note-ctx").textContent = mock.ctx;
+    el.querySelector(".note-time").textContent = time;
+    el.querySelector(".note-prompt").textContent = dict[mock.pk];
+    el.querySelector(".note-result").textContent = dict[mock.rk];
+    return el;
+  }
+
+  function sizeQueue() {
+    var cards = queueEl.querySelectorAll(".note:not(.exit)");
+    if (cards.length >= 2) {
+      queueEl.style.height = (cards[0].offsetHeight + cards[1].offsetHeight + 10 + 20) + "px";
+    }
+  }
+
+  function renderMocks(dict) {
+    currentDict = dict;
+    queueEl.innerHTML = "";
+    queueEl.appendChild(makeNote(MOCKS[head], dict, dict.mockNow));
+    queueEl.appendChild(makeNote(MOCKS[(head + 1) % MOCKS.length], dict, "4m"));
+    sizeQueue();
+  }
+
+  function tick() {
+    if (document.hidden || !currentDict) return;
+    head = (head + MOCKS.length - 1) % MOCKS.length;
+    var entering = makeNote(MOCKS[head], currentDict, currentDict.mockNow);
+    var cards = queueEl.querySelectorAll(".note:not(.exit)");
+    var leaving = cards[cards.length - 1];
+    if (cards.length > 1) cards[0].querySelector(".note-time").textContent = "4m";
+    queueEl.prepend(entering);
+    entering.style.transition = "none";
+    entering.style.marginTop = -(entering.offsetHeight + 10) + "px";
+    entering.style.opacity = "0";
+    entering.style.transform = "translateY(-6px)";
+    entering.getBoundingClientRect();
+    entering.style.transition = "";
+    entering.style.marginTop = "0px";
+    entering.style.opacity = "";
+    entering.style.transform = "";
+    if (leaving) {
+      leaving.classList.add("exit");
+      setTimeout(function () { leaving.remove(); }, 520);
+    }
+  }
+
+  if (!reduceMotion.matches) setInterval(tick, 4000);
+  window.addEventListener("resize", sizeQueue);
+
+  function apply(code) {
+    var dict = I18N[code] || I18N.en;
+    document.documentElement.lang = dict._lang;
+    document.documentElement.setAttribute("data-locale", code);
+    document.title = dict._title;
+    // The seal localises: 跡 is standard in ja and zh-Hant, but a
+    // Simplified reader would see it as a foreign glyph one line above a
+    // tagline that writes 迹. `lang` is pinned separately so the character is
+    // shaped by the right regional face.
+    document.querySelectorAll(".brand-cjk").forEach(function (el) {
+      el.textContent = dict._seal;
+      el.lang = dict._sealLang;
+    });
+    document.querySelectorAll("[data-i18n]").forEach(function (el) {
+      var key = el.getAttribute("data-i18n");
+      if (dict[key]) el.textContent = dict[key];
+    });
+    buttons.forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.lang === code));
+    });
+    try { localStorage.setItem("cairn.lang", code); } catch (e) {}
+    renderMocks(dict);
+  }
+
+  buttons.forEach(function (b) {
+    b.addEventListener("click", function () { apply(b.dataset.lang); });
+  });
+
+  var saved = null;
+  try { saved = localStorage.getItem("cairn.lang"); } catch (e) {}
+  if (saved && I18N[saved]) {
+    apply(saved);
+  } else {
+    var nav = (navigator.languages || [navigator.language || "en"]).join(",").toLowerCase();
+    if (nav.indexOf("zh") !== -1) apply("zh");
+    else if (nav.indexOf("ja") !== -1) apply("ja");
+    else apply("en");
+  }
+})();
+</script>
+
+</body>
+</html>

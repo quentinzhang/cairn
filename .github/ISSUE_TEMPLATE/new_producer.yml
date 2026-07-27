@@ -1,0 +1,51 @@
+name: Support another agent runtime
+description: Ask for, or announce, a bridge that publishes to Cairn
+labels: ["producer"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Cairn does not integrate with agents — it reads a directory. Anything
+        that can write a JSON file can publish a note, and **that needs no
+        change to the app**. See
+        [docs/inbox-protocol.md](https://github.com/everflyzhang/cairn/blob/main/docs/inbox-protocol.md).
+
+        Use this issue to say which runtime you want covered, or to announce a
+        producer you have already written so others can find it.
+
+  - type: input
+    id: runtime
+    attributes:
+      label: Which runtime or tool
+      placeholder: Aider, Continue, a CI pipeline, a long-running build…
+    validations:
+      required: true
+
+  - type: textarea
+    id: completion-signal
+    attributes:
+      label: How does it signal that a turn finished?
+      description: >
+        The hard part of a bridge is always this. A lifecycle hook, a plugin API,
+        an exit code, a log line? Does it hand you the final assistant message
+        directly, or must you parse a transcript? Does it fire on interrupted or
+        failed turns — which must produce no note?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: status
+    attributes:
+      label: Status
+      options:
+        - I would like someone to write this
+        - I am writing it
+        - I have written it and it works
+    validations:
+      required: true
+
+  - type: input
+    id: link
+    attributes:
+      label: Link to your producer
+      description: If you have already written one.

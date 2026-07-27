@@ -1,0 +1,13 @@
+{
+  "id": "cairn",
+  "activation": {
+    "onStartup": true
+  },
+  "name": "Cairn Completion Relay",
+  "description": "Deliver completed OpenClaw turns to the local Cairn macOS inbox.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

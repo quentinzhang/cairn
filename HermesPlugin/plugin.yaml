@@ -1,0 +1,7 @@
+manifest_version: 1
+name: cairn
+version: 0.2.0
+description: "Deliver each completed Hermes turn to the local Cairn macOS inbox."
+author: "Cairn MVP"
+hooks:
+  - post_llm_call

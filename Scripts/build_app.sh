@@ -1,0 +1,35 @@
+#!/bin/zsh
+set -euo pipefail
+
+root="${0:A:h:h}"
+cd "$root"
+swift build -c release
+
+app="$root/dist/Cairn.app"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+cp "$root/.build/release/cairn" "$app/Contents/MacOS/cairn"
+cp "$root/Scripts/cairn_codex_hook.py" "$app/Contents/Resources/cairn_codex_hook.py"
+cp "$root/Scripts/cairn_locator.py" "$app/Contents/Resources/cairn_locator.py"
+cp "$root/Scripts/cairn_save.py" "$app/Contents/Resources/cairn_save.py"
+/bin/rm -rf "$app/Contents/Resources/AgentSkills"
+cp -R "$root/AgentSkills" "$app/Contents/Resources/AgentSkills"
+/bin/rm -rf "$app/Contents/Resources/HermesPlugin" "$app/Contents/Resources/OpenClawPlugin"
+cp -R "$root/HermesPlugin" "$app/Contents/Resources/HermesPlugin"
+cp "$root/Scripts/cairn_claude_hook.py" "$app/Contents/Resources/cairn_claude_hook.py"
+cp -R "$root/OpenClawPlugin" "$app/Contents/Resources/OpenClawPlugin"
+cp "$root/Resources/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
+cp "$root/Resources/Info.plist" "$app/Contents/Info.plist"
+# A stable signing identity keeps TCC grants (Accessibility, Automation)
+# valid across rebuilds; ad-hoc signatures change every build and macOS
+# treats each one as a brand-new app. Override with CAIRN_SIGN_IDENTITY,
+# set it to "-" for ad-hoc on machines without the certificate.
+sign_identity="${CAIRN_SIGN_IDENTITY:-Developer ID Application: Yue Zhang (JFF5GV3L69)}"
+if [[ "$sign_identity" != "-" ]] && ! security find-identity -v -p codesigning | grep -qF "$sign_identity"; then
+  sign_identity="-"
+fi
+if [[ "$sign_identity" == "-" ]]; then
+  codesign --force --deep --sign - "$app" >/dev/null
+else
+  codesign --force --deep --options runtime --timestamp --sign "$sign_identity" "$app" >/dev/null
+fi
+echo "Built $app (signed: $sign_identity)"

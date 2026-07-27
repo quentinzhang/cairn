@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift:
+    name: Build and test
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - run: swift build
+      - run: swift test
+
+      # Signing is unavailable on a runner, so exercise the packaging path with
+      # an ad-hoc signature. This is what catches a bundle-layout mistake — a
+      # resource the app expects at runtime but build_app.sh forgot to copy.
+      - name: Package the app (ad-hoc signed)
+        env:
+          CAIRN_SIGN_IDENTITY: "-"
+        run: ./Scripts/build_app.sh
+
+      - name: Verify the bundle has everything the bridges need
+        run: |
+          set -euo pipefail
+          resources="dist/Cairn.app/Contents/Resources"
+          for required in \
+            cairn_codex_hook.py \
+            cairn_claude_hook.py \
+            cairn_locator.py \
+            cairn_save.py \
+            AppIcon.icns \
+            AgentSkills \
+            HermesPlugin \
+            OpenClawPlugin
+          do
+            if [ ! -e "$resources/$required" ]; then
+              echo "::error::missing from the app bundle: Resources/$required"
+              exit 1
+            fi
+          done
+          test -f dist/Cairn.app/Contents/Info.plist
+          echo "Bundle layout OK"
+
+  python:
+    name: Bridges (Python 3.9)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # The installed hooks invoke /usr/bin/python3 by absolute path, which is
+      # 3.9 on current macOS. Every script here must run under it, so that is
+      # what we compile against — not the runner's newer default.
+      - name: Compile every script under the system interpreter
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 --version
+          /usr/bin/python3 -m compileall -q Scripts HermesPlugin
+
+      - name: Doctor runs on a machine with nothing installed
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 Scripts/cairn_doctor.py || status=$?
+          # No Cairn.app on a runner, so a failure exit is expected; a crash is not.
+          if [ "${status:-0}" -gt 1 ]; then
+            echo "::error::cairn_doctor.py crashed (exit ${status})"
+            exit 1
+          fi
+
+      - name: A published note round-trips through the protocol
+        run: /usr/bin/python3 Tests/protocol_roundtrip.py
+
+  node:
+    name: OpenClaw plugin
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Import the plugin and check its shape
+        run: |
+          node --input-type=module -e '
+            import plugin from "./OpenClawPlugin/index.js";
+            if (plugin.id !== "cairn") {
+              throw new Error("unexpected plugin id: " + plugin.id);
+            }
+            if (typeof plugin.register !== "function") {
+              throw new Error("register() is missing");
+            }
+            console.log("OpenClaw plugin loads:", plugin.name);
+          '

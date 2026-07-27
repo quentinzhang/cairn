@@ -1,0 +1,26 @@
+# Swift build products
+.build/
+.swiftpm/
+*.xcodeproj
+*.xcworkspace
+DerivedData/
+
+# Packaged app and release artifacts
+dist/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Local editor and agent state
+.claude/settings.local.json
+.vscode/
+.idea/
+*.swp

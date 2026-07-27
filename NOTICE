@@ -1,0 +1,44 @@
+Cairn 跡
+Copyright 2026 Yue Zhang
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+--------------------------------------------------------------------------------
+Trademarks
+--------------------------------------------------------------------------------
+
+The Apache License grants rights to the source code. It does not grant rights
+to the Cairn brand. Specifically, the following are reserved and are NOT
+licensed under the Apache License:
+
+  * The name "Cairn" and the wordmark 跡 as used to identify this software.
+  * The Cairn stone mark (the three-river-stone icon, including the artwork in
+    Resources/AppIcon.icns, Resources/AppIcon-1024.png, and the vector marks
+    described in docs/design-system.md).
+
+You may fork, modify, and redistribute the code. If you distribute a modified
+version, please give it your own name and icon so that users can tell your
+build apart from an official Cairn release. Unmodified builds may be described
+as "Cairn"; a modified build should not be, and neither should be presented as
+endorsed by or affiliated with the Cairn project.
+
+Referring to Cairn by name to describe compatibility is always fine — for
+example "publishes notes to Cairn" or "implements the Cairn inbox protocol".
+
+--------------------------------------------------------------------------------
+Third-party integrations
+--------------------------------------------------------------------------------
+
+Cairn integrates with, but does not bundle or redistribute, the following
+independent products. Their names are the trademarks of their respective
+owners and are used here only to describe interoperability:
+
+  * Codex and ChatGPT — OpenAI
+  * Claude Code and Claude — Anthropic
+  * Hermes Agent
+  * OpenClaw
+  * iTerm2, Visual Studio Code, and Apple Terminal
+
+Cairn has no runtime dependency on any third-party Swift, Python, or Node
+package. It uses only the macOS system frameworks, the Python 3 standard
+library, and the Node.js standard library.
