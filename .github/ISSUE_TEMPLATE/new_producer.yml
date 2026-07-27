@@ -8,7 +8,7 @@ body:
         Cairn does not integrate with agents — it reads a directory. Anything
         that can write a JSON file can publish a note, and **that needs no
         change to the app**. See
-        [docs/inbox-protocol.md](https://github.com/everflyzhang/cairn/blob/main/docs/inbox-protocol.md).
+        [docs/inbox-protocol.md](https://github.com/quentinzhang/cairn/blob/main/docs/inbox-protocol.md).
 
         Use this issue to say which runtime you want covered, or to announce a
         producer you have already written so others can find it.

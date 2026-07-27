@@ -8,7 +8,7 @@ touches, so you can verify the claims rather than trust them.
 
 Do not open a public issue. Use GitHub's private vulnerability reporting:
 
-**[Report a vulnerability](https://github.com/everflyzhang/cairn/security/advisories/new)**
+**[Report a vulnerability](https://github.com/quentinzhang/cairn/security/advisories/new)**
 
 Include what you did, what happened, and the affected version
 (`Cairn.app` → menu bar → version, or `CFBundleShortVersionString` in
@@ -70,7 +70,7 @@ visible to anyone looking at your display or recording it.
 One request, once a day:
 
 ```
-GET https://api.github.com/repos/everflyzhang/cairn/releases/latest
+GET https://api.github.com/repos/quentinzhang/cairn/releases/latest
 ```
 
 It sends no identifiers beyond what any HTTPS request implies, carries no note

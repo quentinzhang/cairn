@@ -9,7 +9,8 @@ note instead of a system notification or another window competing for your
 attention. Click the note and it takes you back to the exact terminal tab the
 turn ran in.
 
-[![CI](https://github.com/everflyzhang/cairn/actions/workflows/ci.yml/badge.svg)](https://github.com/everflyzhang/cairn/actions/workflows/ci.yml)
+[![CI](https://github.com/quentinzhang/cairn/actions/workflows/ci.yml/badge.svg)](https://github.com/quentinzhang/cairn/actions/workflows/ci.yml)
+[![Website](https://img.shields.io/badge/website-GitHub%20Pages-1A9E8A.svg)](https://quentinzhang.github.io/cairn/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/macOS-14%2B-lightgrey)
 
@@ -40,10 +41,10 @@ change to this app. See [the inbox protocol](docs/inbox-protocol.md).
 ## Install
 
 Download the notarized `.dmg` from
-[Releases](https://github.com/everflyzhang/cairn/releases/latest), or build it:
+[Releases](https://github.com/quentinzhang/cairn/releases/latest), or build it:
 
 ```bash
-git clone https://github.com/everflyzhang/cairn.git
+git clone https://github.com/quentinzhang/cairn.git
 cd cairn
 ./Scripts/build_app.sh
 open dist/Cairn.app
@@ -230,14 +231,16 @@ intentional brand changes with `./Scripts/generate_app_icon.sh`.
 
 ### Packaging a release
 
-Store App Store Connect credentials in a `notarytool` keychain profile, then:
+The public release workflow runs every test, signs and notarizes locally, creates
+the version commit and tag, and uploads the DMG, ZIP, and checksums:
 
 ```bash
-CAIRN_NOTARY_PROFILE="cairn-notary" ./Scripts/package_release.sh
+CAIRN_NOTARY_PROFILE="cairn-notary" \
+  ./Scripts/release.sh --version 0.7.0
 ```
 
-Hardened runtime signing, notarization and stapling of both the app and the DMG,
-and Gatekeeper validation before it reports success.
+See [the release guide](docs/releasing.md) for one-time setup, curated release
+notes, website deployment, and recovery.
 
 ## Boundaries
 

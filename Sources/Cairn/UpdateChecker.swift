@@ -10,7 +10,7 @@ final class UpdateChecker: ObservableObject {
     @Published private(set) var available: AppUpdate?
 
     private enum Config {
-        static let repository = "everflyzhang/cairn"
+        static let repository = "quentinzhang/cairn"
         static let checkInterval: TimeInterval = 24 * 60 * 60
     }
 
