@@ -17,7 +17,7 @@ jobs:
     name: Build and test
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Swift version
         run: swift --version
@@ -59,7 +59,7 @@ jobs:
     name: Bridges (Python 3.9)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # The installed hooks invoke /usr/bin/python3 by absolute path, which is
       # 3.9 on current macOS. Every script here must run under it, so that is
@@ -87,10 +87,11 @@ jobs:
     name: OpenClaw plugin
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
+          package-manager-cache: false
       - name: Import the plugin and check its shape
         run: |
           node --input-type=module -e '
