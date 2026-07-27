@@ -5,6 +5,54 @@ import { basename, join } from "node:path";
 
 const RESULT_LIMIT = 50_000;
 const inbox = join(homedir(), "Library", "Application Support", "Cairn", "inbox");
+const INTERNAL_RUN_PREFIXES = [
+  "probe-setup-inference-",
+  "openclaw-greeting-",
+  "openclaw-planner-",
+];
+
+function normalized(value) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function hasInternalRunPrefix(value) {
+  const candidate = normalized(value);
+  return INTERNAL_RUN_PREFIXES.some((prefix) => candidate.startsWith(prefix));
+}
+
+function isSubagentSession(value) {
+  return /(^|:)subagent:/i.test(typeof value === "string" ? value.trim() : "");
+}
+
+/**
+ * `agent_end` is a model-run lifecycle hook, not a user-visible completion
+ * hook. OpenClaw also emits it for setup probes, caretaker greetings/plans,
+ * and subagents. Cairn should publish only top-level turns that a user could
+ * reasonably be waiting to resume.
+ */
+export function shouldPublishCompletion(event, context = {}) {
+  if (!event?.success || !Array.isArray(event.messages)) {
+    return false;
+  }
+
+  const runID = event.runId || context.runId;
+  const sessionKey = context.sessionKey;
+  const sessionID = context.sessionId;
+  if (
+    normalized(sessionKey).startsWith("temp:setup-inference:") ||
+    hasInternalRunPrefix(runID) ||
+    hasInternalRunPrefix(sessionID) ||
+    isSubagentSession(sessionKey)
+  ) {
+    return false;
+  }
+
+  const isSystemAgent = normalized(context.agentId) === "openclaw";
+  const isSystemSurface =
+    normalized(context.channel) === "openclaw" ||
+    normalized(context.messageProvider) === "openclaw";
+  return !(isSystemAgent && isSystemSurface);
+}
 
 function asMessage(value) {
   if (!value || typeof value !== "object") {
@@ -97,7 +145,7 @@ export default {
       "agent_end",
       async (event, context) => {
         try {
-          if (!event.success || !Array.isArray(event.messages)) {
+          if (!shouldPublishCompletion(event, context)) {
             return;
           }
           let result = latestMessage(event.messages, "assistant");

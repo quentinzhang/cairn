@@ -117,3 +117,5 @@ jobs:
             }
             console.log("OpenClaw plugin loads:", plugin.name);
           '
+      - name: Test OpenClaw completion filtering
+        run: node --test OpenClawPlugin/index.test.js

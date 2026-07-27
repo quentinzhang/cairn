@@ -145,6 +145,7 @@ node --input-type=module -e '
     throw new Error("OpenClaw plugin contract is invalid");
   }
 '
+node --test OpenClawPlugin/index.test.js
 
 log "Signing, notarizing and stapling release artifacts"
 "$root/Scripts/package_release.sh" \
