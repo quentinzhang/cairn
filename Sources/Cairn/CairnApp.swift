@@ -125,6 +125,31 @@ struct CodexCompletion: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+enum CairnJSON {
+    static func decoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { value in
+            let container = try value.singleValueContainer()
+            let timestamp = try container.decode(String.self)
+            for options: ISO8601DateFormatter.Options in [
+                [.withInternetDateTime, .withFractionalSeconds],
+                [.withInternetDateTime],
+            ] {
+                let formatter = ISO8601DateFormatter()
+                formatter.formatOptions = options
+                if let date = formatter.date(from: timestamp) {
+                    return date
+                }
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Expected an ISO 8601 timestamp."
+            )
+        }
+        return decoder
+    }
+}
+
 /// The trail a hook captured at completion time: which terminal session and
 /// which GUI app hosted the turn. `TrailFinder` replays it on click.
 struct CairnLocator: Codable, Hashable, Sendable {
@@ -273,8 +298,7 @@ final class CompletionStore: ObservableObject {
     }
 
     private static func load(from url: URL) -> [CodexCompletion] {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let decoder = CairnJSON.decoder()
         guard let data = try? Data(contentsOf: url),
               let saved = try? decoder.decode([CodexCompletion].self, from: data) else {
             return []
@@ -320,8 +344,7 @@ final class FileInboxWatcher: @unchecked Sendable {
     }
 
     private func scan() {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let decoder = CairnJSON.decoder()
         let files = (try? FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.creationDateKey],

@@ -10,9 +10,7 @@ import Testing
 /// happens. `Tests/protocol_roundtrip.py` covers the producer end.
 
 private func decode(_ json: String) throws -> CodexCompletion {
-    let decoder = JSONDecoder()
-    decoder.dateDecodingStrategy = .iso8601
-    return try decoder.decode(CodexCompletion.self, from: Data(json.utf8))
+    try CairnJSON.decoder().decode(CodexCompletion.self, from: Data(json.utf8))
 }
 
 /// Exactly the required fields from §3, and nothing else.
@@ -124,10 +122,8 @@ func aMissingRequiredFieldIsRejected() {
         ) as! [String: Any]
         payload.removeValue(forKey: field)
         let data = try! JSONSerialization.data(withJSONObject: payload)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
         #expect(
-            (try? decoder.decode(CodexCompletion.self, from: data)) == nil,
+            (try? CairnJSON.decoder().decode(CodexCompletion.self, from: data)) == nil,
             "decoding should fail without '\(field)'"
         )
     }

@@ -57,14 +57,15 @@ git pull --ff-only
 
 That single command:
 
-1. chooses the next bundle build number;
-2. updates `Resources/Info.plist`;
-3. runs the Swift, protocol, and OpenClaw checks;
-4. builds, signs, notarizes, staples, and Gatekeeper-validates the ZIP and DMG;
-5. commits the version, creates `v0.7.0`, and pushes both atomically;
-6. creates the GitHub Release with generated notes;
-7. uploads the ZIP, DMG, and SHA-256 checksum file;
-8. reads the public release back and verifies all three assets exist.
+1. confirms the local commit matches `origin/main` and its GitHub CI passed;
+2. chooses the next bundle build number;
+3. updates `Resources/Info.plist`;
+4. runs the Swift, protocol, and OpenClaw checks;
+5. builds, signs, notarizes, staples, and Gatekeeper-validates the ZIP and DMG;
+6. commits the version, creates `v0.7.0`, and pushes both atomically;
+7. creates the GitHub Release with generated notes;
+8. uploads the ZIP, DMG, and SHA-256 checksum file;
+9. reads the public release back and verifies all three assets exist.
 
 Use curated release notes when needed:
 

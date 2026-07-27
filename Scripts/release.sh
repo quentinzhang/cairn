@@ -75,6 +75,16 @@ origin_repository=$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev
 git fetch --quiet origin main --tags
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || \
   die "Local main is not synchronized with origin/main. Pull or push before releasing."
+head_sha=$(git rev-parse HEAD)
+ci_state=$(gh run list \
+  --repo "$github_repository" \
+  --workflow ci.yml \
+  --commit "$head_sha" \
+  --limit 1 \
+  --json status,conclusion \
+  --jq 'if length == 0 then "missing" else "\(.[0].status):\(.[0].conclusion)" end')
+[[ "$ci_state" == "completed:success" ]] || \
+  die "CI for $head_sha is $ci_state. Release only a commit whose GitHub CI passed."
 
 tag="v$version"
 git rev-parse "$tag" >/dev/null 2>&1 && die "Tag $tag already exists locally."
