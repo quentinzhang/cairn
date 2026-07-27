@@ -265,22 +265,26 @@ final class PermissionExperience: ObservableObject {
 
     private static let currentJourneyVersion = 1
 
-    private let terminalAccess = AutomationAccess(
-        kind: .terminal,
-        title: L10n.string("access.terminal.title"),
-        detail: L10n.string("access.terminal.short_detail"),
-        bundleID: "com.apple.Terminal",
-        scriptName: "Terminal",
-        icon: "terminal"
-    )
-    private let itermAccess = AutomationAccess(
-        kind: .iterm,
-        title: L10n.string("access.iterm.title"),
-        detail: L10n.string("access.iterm.short_detail"),
-        bundleID: "com.googlecode.iterm2",
-        scriptName: "iTerm2",
-        icon: "rectangle.split.2x1"
-    )
+    private var terminalAccess: AutomationAccess {
+        AutomationAccess(
+            kind: .terminal,
+            title: L10n.string("access.terminal.title"),
+            detail: L10n.string("access.terminal.short_detail"),
+            bundleID: "com.apple.Terminal",
+            scriptName: "Terminal",
+            icon: "terminal"
+        )
+    }
+    private var itermAccess: AutomationAccess {
+        AutomationAccess(
+            kind: .iterm,
+            title: L10n.string("access.iterm.title"),
+            detail: L10n.string("access.iterm.short_detail"),
+            bundleID: "com.googlecode.iterm2",
+            scriptName: "iTerm2",
+            icon: "rectangle.split.2x1"
+        )
+    }
 
     private var welcomeWindow: NSWindow?
     private var centerWindow: NSWindow?
@@ -303,6 +307,15 @@ final class PermissionExperience: ObservableObject {
                 queue: .main
             ) { [weak self] _ in
                 Task { @MainActor [weak self] in self?.refresh() }
+            }
+        )
+        workspaceObservers.append(
+            center.addObserver(
+                forName: .cairnLanguageDidChange,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.refreshLocalization() }
             }
         )
 
@@ -336,6 +349,7 @@ final class PermissionExperience: ObservableObject {
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(
             rootView: PermissionWelcomeView(
+                languageSettings: .shared,
                 onReview: { [weak self] in
                     self?.finishWelcome()
                     self?.presentCenter()
@@ -367,7 +381,12 @@ final class PermissionExperience: ObservableObject {
         )
         window.title = L10n.string("access.window.title")
         window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: PermissionCenterView(experience: self))
+        window.contentView = NSHostingView(
+            rootView: PermissionCenterView(
+                experience: self,
+                languageSettings: .shared
+            )
+        )
         window.center()
         centerWindow = window
 
@@ -562,6 +581,12 @@ final class PermissionExperience: ObservableObject {
         }
     }
 
+    private func refreshLocalization() {
+        welcomeWindow?.title = L10n.string("access.window.welcome")
+        centerWindow?.title = L10n.string("access.window.title")
+        refresh()
+    }
+
     private func migrateLegacyState() {
         let defaults = UserDefaults.standard
         guard !defaults.bool(forKey: PreferenceKey.accessibilityRequested) else { return }
@@ -671,6 +696,7 @@ final class PermissionExperience: ObservableObject {
 }
 
 private struct PermissionWelcomeView: View {
+    @ObservedObject var languageSettings: LanguageSettings
     let onReview: () -> Void
     let onLater: () -> Void
 
@@ -716,6 +742,7 @@ private struct PermissionWelcomeView: View {
 
 private struct PermissionCenterView: View {
     @ObservedObject var experience: PermissionExperience
+    @ObservedObject var languageSettings: LanguageSettings
 
     var body: some View {
         ScrollView {

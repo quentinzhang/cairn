@@ -64,7 +64,8 @@ func everyOptionalFieldDecodes() throws {
         "host_app_path": "/Applications/iTerm.app",
         "host_app_pid": 4200,
         "host_apps": [{"path": "/Applications/iTerm.app", "pid": 4200}],
-        "web_url": "http://127.0.0.1:18789"
+        "web_url": "http://127.0.0.1:18789/chat?session=agent%3Amain%3Amain",
+        "browser_bundle_id": "com.google.Chrome"
       }
     }
     """)
@@ -73,7 +74,11 @@ func everyOptionalFieldDecodes() throws {
     #expect(completion.platform == "cli")
     #expect(completion.locator?.tty == "ttys004")
     #expect(completion.locator?.hostApps?.first?.pid == 4200)
-    #expect(completion.locator?.webURL == "http://127.0.0.1:18789")
+    #expect(
+        completion.locator?.webURL
+            == "http://127.0.0.1:18789/chat?session=agent%3Amain%3Amain"
+    )
+    #expect(completion.locator?.browserBundleID == "com.google.Chrome")
 }
 
 @Test

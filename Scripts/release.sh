@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/zsh -f
 set -euo pipefail
 
 # The public release entry point. Apple credentials stay in the local keychain:
@@ -23,7 +23,7 @@ Usage: ./Scripts/release.sh --version <semver> [options]
   --notes-file <path>      Markdown release notes. GitHub generates notes when omitted.
   --notary-profile <name>  notarytool keychain profile. Or set CAIRN_NOTARY_PROFILE.
                            Alternatively set ASC_KEY_PATH, ASC_KEY_ID, and
-                           ASC_ISSUER_ID for API-key authentication.
+                           ASC_ISSUER_ID for Team API-key authentication.
   --sign-identity <name>   Developer ID identity. Or set CAIRN_SIGN_IDENTITY.
   --repo <owner/name>      GitHub repository. Defaults to quentinzhang/cairn.
   --help
@@ -53,9 +53,15 @@ done
 [[ -n "$version" ]] || die "--version is required."
 [[ "$version" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' ]] || \
   die "--version must contain exactly three numeric components, such as 0.7.0."
+api_key_configured=0
+[[ -n "${ASC_KEY_PATH:-}" || -n "${ASC_KEY_ID:-}" || -n "${ASC_ISSUER_ID:-}" ]] && \
+  api_key_configured=1
+if [[ -n "$notary_profile" && "$api_key_configured" == 1 ]]; then
+  die "Choose one notarization method: CAIRN_NOTARY_PROFILE or ASC_KEY_* variables, not both."
+fi
 if [[ -z "$notary_profile" ]]; then
   [[ -n "${ASC_KEY_PATH:-}" && -n "${ASC_KEY_ID:-}" && -n "${ASC_ISSUER_ID:-}" ]] || \
-    die "Set a notary profile or ASC_KEY_PATH, ASC_KEY_ID, and ASC_ISSUER_ID."
+    die "Set a notary profile or the Team API Key tuple: ASC_KEY_PATH, ASC_KEY_ID, and ASC_ISSUER_ID."
 fi
 [[ -z "$notes_file" || -f "$notes_file" ]] || die "Release notes file not found: $notes_file"
 

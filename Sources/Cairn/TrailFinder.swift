@@ -38,18 +38,31 @@ enum ConversationTrail {
         return URL(string: "codex://threads/\(completion.sessionID)")
     }
 
-    /// Hermes Desktop owns the same durable session id that its completion
-    /// hook receives. Its app URL opens that precise transcript rather than
-    /// merely bringing the Hermes process to the foreground.
-    static func hermesSessionURL(for completion: CodexCompletion) -> URL? {
+    /// Hermes Web Dashboard documents `/chat?resume=<session-id>` as its
+    /// session-recovery route. The bridge records its Dashboard base only for
+    /// browser-embedded turns, so Desktop and CLI notes retain their existing
+    /// app/terminal trails.
+    static func hermesDashboardSessionURL(for completion: CodexCompletion) -> URL? {
         guard completion.source?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "hermes",
-              completion.platform?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "desktop",
               !completion.sessionID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               completion.sessionID != "unknown-session",
-              var components = URLComponents(string: "hermes://session") else {
+              let webURL = completion.locator?.webURL,
+              var components = URLComponents(string: webURL),
+              let scheme = components.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              components.host != nil else {
             return nil
         }
-        components.path = "/\(completion.sessionID)"
+
+        let basePath = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        components.path = basePath.hasSuffix("chat")
+            ? "/\(basePath)"
+            : "/\(basePath.isEmpty ? "" : "\(basePath)/")chat"
+
+        var queryItems = components.queryItems ?? []
+        queryItems.removeAll { $0.name == "resume" }
+        queryItems.append(URLQueryItem(name: "resume", value: completion.sessionID))
+        components.queryItems = queryItems
         return components.url
     }
 
@@ -91,6 +104,11 @@ enum TrailFinder {
             return
         }
 
+        if let hermesSessionURL = ConversationTrail.hermesDashboardSessionURL(for: completion) {
+            openWebURLReusingTab(hermesSessionURL)
+            return
+        }
+
         // Claude Code sessions are addressable at CONVERSATION level: the
         // desktop app's `claude://resume?session=<uuid>` deep link imports and
         // opens the exact CLI session. Terminal/iTerm still win above (they
@@ -100,15 +118,6 @@ enum TrailFinder {
            UUID(uuidString: completion.sessionID) != nil,
            let deepLink = URL(string: "claude://resume?session=\(completion.sessionID)"),
            NSWorkspace.shared.open(deepLink) {
-            return
-        }
-
-        // Hermes Desktop accepts the durable session id emitted by its
-        // post_llm_call hook. CLI/TUI/Gateway turns intentionally retain the
-        // terminal/app fallback below; only the Desktop surface is addressable
-        // as a conversation.
-        if let hermesSessionURL = ConversationTrail.hermesSessionURL(for: completion),
-           NSWorkspace.shared.open(hermesSessionURL) {
             return
         }
 
@@ -131,7 +140,10 @@ enum TrailFinder {
 
         // A browser-surfaced turn: return to its web UI.
         if let web = locator?.webURL, let url = URL(string: web) {
-            openWebURLReusingTab(url)
+            openWebURLReusingTab(
+                url,
+                preferredBrowserBundleID: locator?.browserBundleID
+            )
             return
         }
 
@@ -379,17 +391,75 @@ enum TrailFinder {
 
     /// Opening a URL through NSWorkspace always spawns a fresh tab — macOS
     /// has no "focus the tab showing X" API. So for web surfaces we script
-    /// every supported running browser, with the default browser first: find
-    /// a tab whose URL lives on the same origin, select and raise it, and only
-    /// open a new tab when none exists. Both loopback spellings
+    /// supported running browsers, with the last successful browser and the
+    /// default browser first: find a tab whose URL lives on the same origin,
+    /// navigate it to the notification's exact session URL, select and raise
+    /// it, and only open a new tab when none exists. Both loopback spellings
     /// (127.0.0.1 / localhost) are matched, since the user may have typed
     /// either.
-    private static func openWebURLReusingTab(_ url: URL) {
+    private static func openWebURLReusingTab(
+        _ url: URL,
+        preferredBrowserBundleID: String? = nil
+    ) {
         let origins = tabMatchOrigins(for: url)
-        for browser in runningScriptableBrowsers() {
-            if focusExistingTab(in: browser, matchingOrigins: origins) {
+        let exactURLs = tabMatchURLs(for: url)
+        let rememberedBrowser = rememberedBrowserBundleID(for: origins)
+        let strongPreferenceIDs = Set(
+            [preferredBrowserBundleID, rememberedBrowser]
+                .compactMap { $0?.lowercased() }
+        )
+        let browsers = runningScriptableBrowsers(
+            preferredBundleIDs: [preferredBrowserBundleID, rememberedBrowser]
+        )
+        let preferredBrowsers = browsers.filter {
+            strongPreferenceIDs.contains($0.bundleID)
+        }
+        let fallbackBrowsers = browsers.filter {
+            !strongPreferenceIDs.contains($0.bundleID)
+        }
+
+        // A producer hint or a previously successful match is strong evidence:
+        // try both the exact session and another OpenClaw tab in that browser
+        // before inspecting any others.
+        for browser in preferredBrowsers {
+            if focusExistingTab(in: browser, matchingExactURLs: exactURLs) {
+                remember(browser: browser, for: origins)
                 return
             }
+            if focusExistingTab(
+                in: browser,
+                matchingOrigins: origins,
+                navigatingTo: url.absoluteString
+            ) {
+                remember(browser: browser, for: origins)
+                return
+            }
+        }
+
+        // With no remembered browser (or after it stops containing OpenClaw),
+        // search all remaining running browsers for an exact session before
+        // repurposing a same-origin tab.
+        for browser in fallbackBrowsers {
+            if focusExistingTab(in: browser, matchingExactURLs: exactURLs) {
+                remember(browser: browser, for: origins)
+                return
+            }
+        }
+        for browser in fallbackBrowsers {
+            if focusExistingTab(
+                in: browser,
+                matchingOrigins: origins,
+                navigatingTo: url.absoluteString
+            ) {
+                remember(browser: browser, for: origins)
+                return
+            }
+        }
+
+        // NSWorkspace opens the user's default browser. Remember that choice
+        // so the next completion starts with the browser Cairn just used.
+        if let browser = defaultScriptableBrowser() {
+            remember(browser: browser, for: origins)
         }
         NSWorkspace.shared.open(url)
     }
@@ -427,7 +497,9 @@ enum TrailFinder {
         return scriptableBrowser(bundleID: bundleID)
     }
 
-    private static func runningScriptableBrowsers() -> [ScriptableBrowser] {
+    private static func runningScriptableBrowsers(
+        preferredBundleIDs: [String?] = []
+    ) -> [ScriptableBrowser] {
         var browsers: [ScriptableBrowser] = []
         var seen = Set<String>()
 
@@ -444,6 +516,10 @@ enum TrailFinder {
                 $0.bundleIdentifier?.lowercased()
             }
         )
+        for bundleID in preferredBundleIDs.compactMap({ $0?.lowercased() })
+        where runningBundleIDs.contains(bundleID) {
+            append(scriptableBrowser(bundleID: bundleID))
+        }
         if let browser = defaultScriptableBrowser(),
            runningBundleIDs.contains(browser.bundleID) {
             append(browser)
@@ -452,6 +528,28 @@ enum TrailFinder {
             append(scriptableBrowser(bundleID: bundleID))
         }
         return browsers
+    }
+
+    private static let browserAffinityDefaultsKey = "cairn.browserAffinityByWebOrigin"
+
+    private static func rememberedBrowserBundleID(for origins: [String]) -> String? {
+        guard let affinities = UserDefaults.standard.dictionary(
+            forKey: browserAffinityDefaultsKey
+        ) as? [String: String] else {
+            return nil
+        }
+        return origins.compactMap { affinities[$0] }.first
+    }
+
+    private static func remember(browser: ScriptableBrowser, for origins: [String]) {
+        guard !origins.isEmpty else { return }
+        var affinities = UserDefaults.standard.dictionary(
+            forKey: browserAffinityDefaultsKey
+        ) as? [String: String] ?? [:]
+        for origin in origins {
+            affinities[origin] = browser.bundleID
+        }
+        UserDefaults.standard.set(affinities, forKey: browserAffinityDefaultsKey)
     }
 
     nonisolated static func tabMatchOrigins(for url: URL) -> [String] {
@@ -466,13 +564,62 @@ enum TrailFinder {
         return hosts.map { "\(scheme)://\($0)\(port)" }
     }
 
+    nonisolated static func tabMatchURLs(for url: URL) -> [String] {
+        guard let host = url.host else { return [] }
+        var hosts = [host]
+        if host == "127.0.0.1" {
+            hosts.append("localhost")
+        } else if host == "localhost" {
+            hosts.append("127.0.0.1")
+        }
+        return hosts.compactMap { candidateHost in
+            guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+                return nil
+            }
+            components.host = candidateHost
+            return components.url?.absoluteString
+        }
+    }
+
     private static func focusExistingTab(
         in browser: ScriptableBrowser,
-        matchingOrigins origins: [String]
+        matchingExactURLs exactURLs: [String]
     ) -> Bool {
-        guard !origins.isEmpty else {
-            return false
-        }
+        guard !exactURLs.isEmpty else { return false }
+        let condition = exactURLs
+            .map { "u is \"\($0)\"" }
+            .joined(separator: " or ")
+        return runBrowserTabScript(
+            in: browser,
+            condition: condition,
+            navigatingTo: nil
+        )
+    }
+
+    private static func focusExistingTab(
+        in browser: ScriptableBrowser,
+        matchingOrigins origins: [String],
+        navigatingTo targetURL: String
+    ) -> Bool {
+        guard !origins.isEmpty else { return false }
+
+        // Match a complete origin boundary. A raw "starts with origin" check
+        // also accepts a different port such as :187890.
+        let condition = origins
+            .map { "(u is \"\($0)\") or (u starts with \"\($0)/\")" }
+            .joined(separator: " or ")
+        return runBrowserTabScript(
+            in: browser,
+            condition: condition,
+            navigatingTo: targetURL
+        )
+    }
+
+    private static func runBrowserTabScript(
+        in browser: ScriptableBrowser,
+        condition: String,
+        navigatingTo targetURL: String?
+    ) -> Bool {
 
         // The access center refreshes permission state asynchronously. A note
         // can be clicked while that cached state is still `checking`, so probe
@@ -494,11 +641,7 @@ enum TrailFinder {
             return false
         }
 
-        // Match a complete origin boundary. A raw "starts with origin" check
-        // also accepts a different port such as :187890.
-        let condition = origins
-            .map { "(u is \"\($0)\") or (u starts with \"\($0)/\")" }
-            .joined(separator: " or ")
+        let navigation = targetURL.map { "set URL of t to \"\($0)\"" } ?? ""
 
         let script: String
         switch browser.dialect {
@@ -509,6 +652,7 @@ enum TrailFinder {
                     repeat with t in tabs of w
                         set u to URL of t
                         if u is not missing value and (\(condition)) then
+                            \(navigation)
                             set current tab of w to t
                             set index of w to 1
                             activate
@@ -527,6 +671,7 @@ enum TrailFinder {
                     repeat with t in tabs of w
                         set u to URL of t
                         if u is not missing value and (\(condition)) then
+                            \(navigation)
                             set active tab index of w to tabIndex
                             set index of w to 1
                             activate

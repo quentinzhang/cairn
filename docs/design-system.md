@@ -415,13 +415,9 @@ identity row (agent, workspace, time, dismiss), prompt, answer. The answer takes
 and never ragged. The tone rail is 3 × 54 at the leading edge — deliberately
 shorter than the card, so it reads as a bookmark rather than a border.
 
-**Menu bar list** (`MenuBarCompletionRow`) — the same information at a quarter
-the height, for when the floating queue is collapsed. Rail drops to 4 × 36, the
-prompt is dropped entirely, one line of answer survives.
-
-**Empty state** — `wind` glyph, "No notes waiting". Cairn is at its best when
-it is empty; the empty state should feel like the resting position, not like a
-failure to load.
+**Menu bar control center** (`MenuBarQueueView`) — contains status and controls
+only. Note contents and queue counts stay on the floating surface, keeping one
+authoritative place to read, follow, and dismiss completed turns.
 
 ---
 

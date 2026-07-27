@@ -225,6 +225,7 @@ it when a note is clicked.
 | `host_app_pid` | integer | Its pid |
 | `host_apps` | array of `{path, pid}` | **Every** `.app` ancestor, innermost first |
 | `web_url` | string | For browser-hosted surfaces: the URL to reopen instead of a local window |
+| `browser_bundle_id` | string | Optional browser hint, e.g. `com.google.Chrome`; Cairn remembers the browser after a successful tab match when omitted |
 
 Notes for producers:
 

@@ -1,4 +1,71 @@
+import Combine
 import Foundation
+
+enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
+    case system
+    case english = "en"
+    case simplifiedChinese = "zh-Hans"
+    case japanese = "ja"
+
+    var id: String { rawValue }
+
+    var localeIdentifier: String? {
+        self == .system ? nil : rawValue
+    }
+
+    var displayName: String {
+        switch self {
+        case .system:
+            L10n.string("language.follow_system")
+        case .english:
+            "English"
+        case .simplifiedChinese:
+            "简体中文"
+        case .japanese:
+            "日本語"
+        }
+    }
+}
+
+@MainActor
+final class LanguageSettings: ObservableObject {
+    static let shared = LanguageSettings()
+    nonisolated static let preferenceKey = "cairn.interfaceLanguage"
+
+    @Published private(set) var selection: AppLanguage
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        selection = Self.savedLanguage(in: defaults)
+    }
+
+    func select(_ language: AppLanguage) {
+        guard selection != language else { return }
+
+        if language == .system {
+            defaults.removeObject(forKey: Self.preferenceKey)
+        } else {
+            defaults.set(language.rawValue, forKey: Self.preferenceKey)
+        }
+        selection = language
+        NotificationCenter.default.post(name: .cairnLanguageDidChange, object: language)
+    }
+
+    nonisolated static func savedLanguage(in defaults: UserDefaults) -> AppLanguage {
+        guard let rawValue = defaults.string(forKey: preferenceKey),
+              let language = AppLanguage(rawValue: rawValue),
+              language != .system else {
+            return .system
+        }
+        return language
+    }
+}
+
+extension Notification.Name {
+    static let cairnLanguageDidChange = Notification.Name("app.cairn.languageDidChange")
+}
 
 /// One localization boundary for both SwiftUI and AppKit-created windows.
 ///
@@ -10,7 +77,12 @@ enum L10n {
     static let supportedLocales = ["en", "zh-Hans", "ja"]
 
     static func string(_ key: String) -> String {
-        localizedBundle().localizedString(forKey: key, value: key, table: nil)
+        string(key, defaults: .standard)
+    }
+
+    static func string(_ key: String, defaults: UserDefaults) -> String {
+        localizedBundle(localeIdentifier: preferredLocaleIdentifier(defaults: defaults))
+            .localizedString(forKey: key, value: key, table: nil)
     }
 
     static func string(_ key: String, localeIdentifier: String) -> String {
@@ -19,9 +91,10 @@ enum L10n {
     }
 
     static func format(_ key: String, _ arguments: CVarArg...) -> String {
-        String(
+        let localeIdentifier = preferredLocaleIdentifier()
+        return String(
             format: string(key),
-            locale: Locale.current,
+            locale: localeIdentifier.map(Locale.init(identifier:)) ?? Locale.current,
             arguments: arguments
         )
     }
@@ -49,6 +122,12 @@ enum L10n {
             return resources
         }
         return bundle
+    }
+
+    static func preferredLocaleIdentifier(
+        defaults: UserDefaults = .standard
+    ) -> String? {
+        LanguageSettings.savedLanguage(in: defaults).localeIdentifier
     }
 
     /// SwiftPM's generated `Bundle.module` accessor expects its resource bundle

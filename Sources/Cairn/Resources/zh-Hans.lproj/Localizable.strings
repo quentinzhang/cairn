@@ -15,16 +15,14 @@
 
 "note.dismiss" = "移除此便签";
 "note.follow" = "点击返回任务运行的位置";
-"menu.quietly_listening" = "静静聆听";
-"menu.active_notes.one" = "%d 条待处理便签";
-"menu.active_notes.many" = "%d 条待处理便签";
-"menu.no_notes" = "没有等待处理的便签";
-"menu.notes_appear" = "智能体完成任务后会在这里留下便签。";
 "menu.collapse_notes" = "收起便签";
 "menu.expand_notes" = "展开便签";
 "menu.clear" = "清空";
 "menu.access" = "访问权限";
 "menu.quit" = "退出 Cairn";
+
+"language.menu" = "语言";
+"language.follow_system" = "跟随系统";
 
 "update.available" = "有新版本";
 "update.version_format" = "Cairn %@";

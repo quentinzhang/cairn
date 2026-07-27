@@ -7,7 +7,7 @@ private func completion(
     source: String? = "codex",
     event: String = "codex.turn.completed",
     sessionID: String = "019f9fe6-41d4-7d73-878c-255e57907727",
-    platform: String? = nil
+    locator: CairnLocator? = nil
 ) -> CodexCompletion {
     CodexCompletion(
         id: "completion",
@@ -23,8 +23,8 @@ private func completion(
         source: source,
         userMessage: nil,
         model: nil,
-        platform: platform,
-        locator: nil
+        platform: nil,
+        locator: locator
     )
 }
 
@@ -48,22 +48,6 @@ func codexCompletionBuildsConversationDeepLink() {
 }
 
 @Test
-func hermesDesktopCompletionBuildsConversationDeepLink() {
-    let url = ConversationTrail.hermesSessionURL(
-        for: completion(source: "hermes", sessionID: "20260727_123456_abcd", platform: "desktop")
-    )
-    #expect(url?.absoluteString == "hermes://session/20260727_123456_abcd")
-}
-
-@Test
-func hermesNonDesktopCompletionDoesNotBuildConversationDeepLink() {
-    let url = ConversationTrail.hermesSessionURL(
-        for: completion(source: "hermes", sessionID: "20260727_123456_abcd", platform: "tui")
-    )
-    #expect(url == nil)
-}
-
-@Test
 func eventProvidesSourceForOlderCompletion() {
     let url = ConversationTrail.codexThreadURL(for: completion(source: nil))
     #expect(url?.absoluteString == "codex://threads/019f9fe6-41d4-7d73-878c-255e57907727")
@@ -73,6 +57,41 @@ func eventProvidesSourceForOlderCompletion() {
 func invalidOrNonCodexSessionDoesNotBuildDeepLink() {
     #expect(ConversationTrail.codexThreadURL(for: completion(source: "claude-code")) == nil)
     #expect(ConversationTrail.codexThreadURL(for: completion(sessionID: "unknown-session")) == nil)
+}
+
+@Test
+func hermesDashboardCompletionBuildsSessionRecoveryURL() {
+    let locator = CairnLocator(
+        termProgram: nil,
+        termSessionID: nil,
+        itermSessionID: nil,
+        tmuxPane: nil,
+        tty: nil,
+        hostAppPath: nil,
+        hostAppPID: nil,
+        agentPID: nil,
+        hostApps: nil,
+        webURL: "https://hermes.example/dashboard?profile=research",
+        browserBundleID: nil
+    )
+
+    let url = ConversationTrail.hermesDashboardSessionURL(
+        for: completion(
+            source: "hermes",
+            sessionID: "20260728_123456_abcd",
+            locator: locator
+        )
+    )
+    #expect(url?.absoluteString == "https://hermes.example/dashboard/chat?profile=research&resume=20260728_123456_abcd")
+}
+
+@Test
+func hermesDesktopCompletionDoesNotInventDashboardURL() {
+    #expect(
+        ConversationTrail.hermesDashboardSessionURL(
+            for: completion(source: "hermes")
+        ) == nil
+    )
 }
 
 @Test
@@ -87,7 +106,8 @@ func recognizesBothCurrentDesktopBundleNames() {
         hostAppPID: nil,
         agentPID: nil,
         hostApps: nil,
-        webURL: nil
+        webURL: nil,
+        browserBundleID: nil
     )
     let codex = CairnLocator(
         termProgram: nil,
@@ -99,7 +119,8 @@ func recognizesBothCurrentDesktopBundleNames() {
         hostAppPID: nil,
         agentPID: nil,
         hostApps: nil,
-        webURL: nil
+        webURL: nil,
+        browserBundleID: nil
     )
     let editor = CairnLocator(
         termProgram: nil,
@@ -111,7 +132,8 @@ func recognizesBothCurrentDesktopBundleNames() {
         hostAppPID: nil,
         agentPID: nil,
         hostApps: nil,
-        webURL: nil
+        webURL: nil,
+        browserBundleID: nil
     )
 
     #expect(ConversationTrail.wasHostedByCodexDesktop(chatGPT))
@@ -137,6 +159,20 @@ func browserTabOriginsPreserveSchemeHostAndPortOnly() throws {
     #expect(
         TrailFinder.tabMatchOrigins(for: url)
             == ["https://openclaw.example:8443"]
+    )
+}
+
+@Test
+func browserExactSessionURLsIncludeBothLoopbackSpellings() throws {
+    let url = try #require(
+        URL(string: "http://127.0.0.1:18789/chat?session=agent%3Amain%3Amain")
+    )
+    #expect(
+        TrailFinder.tabMatchURLs(for: url)
+            == [
+                "http://127.0.0.1:18789/chat?session=agent%3Amain%3Amain",
+                "http://localhost:18789/chat?session=agent%3Amain%3Amain",
+            ]
     )
 }
 

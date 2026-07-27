@@ -321,7 +321,6 @@ extension Cairn {
         static let badgeSize: CGFloat = 19
 
         static let menuWidth: CGFloat = 340
-        static let menuListMaxHeight: CGFloat = 330
         static let dismissTarget: CGFloat = 19
 
         /// The note queue draws its own scroll thumb: the system overlay

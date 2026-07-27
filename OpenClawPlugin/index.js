@@ -113,16 +113,25 @@ function modelFor(context) {
   return context.modelId || context.modelProviderId || "";
 }
 
+export function buildGatewayWebURL(port, sessionKey) {
+  const url = new URL(`http://127.0.0.1:${port}/chat`);
+  if (sessionKey) {
+    url.searchParams.set("session", sessionKey);
+  }
+  return url.toString();
+}
+
 // OpenClaw conversations surface in a browser tab (webchat) or a chat app —
-// there is no local window to trail back to. Capture the gateway's web UI
-// address so a click on the note reopens the conversation surface.
-async function gatewayWebURL() {
+// there is no local window to trail back to. Capture the official Control UI
+// session route so a click on the note can navigate an existing OpenClaw tab
+// to the exact conversation without injecting code into the page.
+async function gatewayWebURL(sessionKey) {
   try {
     const raw = await readFile(join(homedir(), ".openclaw", "openclaw.json"), "utf8");
     const port = JSON.parse(raw)?.gateway?.port ?? 18789;
-    return `http://127.0.0.1:${port}`;
+    return buildGatewayWebURL(port, sessionKey);
   } catch {
-    return "http://127.0.0.1:18789";
+    return buildGatewayWebURL(18789, sessionKey);
   }
 }
 
@@ -183,7 +192,7 @@ export default {
           if (model) {
             payload.model = model;
           }
-          payload.locator = { web_url: await gatewayWebURL() };
+          payload.locator = { web_url: await gatewayWebURL(sessionID) };
           await publish(payload);
         } catch (error) {
           api.logger.warn(

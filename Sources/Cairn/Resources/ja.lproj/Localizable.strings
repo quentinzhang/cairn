@@ -15,16 +15,14 @@
 
 "note.dismiss" = "このノートを消す";
 "note.follow" = "クリックして実行元へ戻る";
-"menu.quietly_listening" = "静かに待機中";
-"menu.active_notes.one" = "%d件のノート";
-"menu.active_notes.many" = "%d件のノート";
-"menu.no_notes" = "待機中のノートはありません";
-"menu.notes_appear" = "エージェントの完了結果がここに表示されます。";
 "menu.collapse_notes" = "ノートを閉じる";
 "menu.expand_notes" = "ノートを開く";
 "menu.clear" = "すべて消す";
 "menu.access" = "アクセス";
 "menu.quit" = "Cairnを終了";
+
+"language.menu" = "言語";
+"language.follow_system" = "システムに従う";
 
 "update.available" = "アップデートがあります";
 "update.version_format" = "Cairn %@";

@@ -32,15 +32,23 @@ enum CairnBuildInfo {
 @MainActor
 struct CairnApp: App {
     @NSApplicationDelegateAdaptor(CairnAppDelegate.self) private var appDelegate
+    @StateObject private var languageSettings: LanguageSettings
     @StateObject private var store: CompletionStore
     @StateObject private var presenter: FloatingQueuePresenter
     @StateObject private var updateChecker: UpdateChecker
     @StateObject private var permissions: PermissionExperience
 
     init() {
+        let languageSettings = LanguageSettings.shared
+        _languageSettings = StateObject(wrappedValue: languageSettings)
         let store = CompletionStore()
         _store = StateObject(wrappedValue: store)
-        _presenter = StateObject(wrappedValue: FloatingQueuePresenter(store: store))
+        _presenter = StateObject(
+            wrappedValue: FloatingQueuePresenter(
+                store: store,
+                languageSettings: languageSettings
+            )
+        )
         let updateChecker = UpdateChecker()
         updateChecker.start()
         _updateChecker = StateObject(wrappedValue: updateChecker)
@@ -53,7 +61,8 @@ struct CairnApp: App {
                 store: store,
                 presenter: presenter,
                 updateChecker: updateChecker,
-                permissions: permissions
+                permissions: permissions,
+                languageSettings: languageSettings
             )
         } label: {
             Image(nsImage: CairnMenuBarIcon.shared)
@@ -193,6 +202,10 @@ struct CairnLocator: Codable, Hashable, Sendable {
     /// For turns whose surface is a browser (OpenClaw webchat): the UI to
     /// reopen instead of any local window.
     let webURL: String?
+    /// Optional producer-supplied browser hint. OpenClaw's public agent hook
+    /// does not expose this today, so TrailFinder also learns the browser
+    /// after a successful tab match and remembers it per web origin.
+    let browserBundleID: String?
 
     enum CodingKeys: String, CodingKey {
         case termProgram = "term_program"
@@ -205,6 +218,7 @@ struct CairnLocator: Codable, Hashable, Sendable {
         case agentPID = "agent_pid"
         case hostApps = "host_apps"
         case webURL = "web_url"
+        case browserBundleID = "browser_bundle_id"
     }
 }
 
@@ -413,7 +427,7 @@ final class FloatingQueuePresenter: ObservableObject {
         static let controlY = "cairn.controlPanel.y"
     }
 
-    init(store: CompletionStore) {
+    init(store: CompletionStore, languageSettings: LanguageSettings) {
         let preferences = UserDefaults.standard
         presentsNotes = preferences.object(forKey: PreferenceKey.presentsNotes) == nil
             ? false
@@ -437,7 +451,7 @@ final class FloatingQueuePresenter: ObservableObject {
             defer: false
         )
 
-        configurePanels(store: store)
+        configurePanels(store: store, languageSettings: languageSettings)
         store.onQueueChange = { [weak self] count in
             guard let self, self.hasFinishedLaunching else { return }
             self.syncPanels(itemCount: count)
@@ -511,18 +525,30 @@ final class FloatingQueuePresenter: ObservableObject {
         }
     }
 
-    private func configurePanels(store: CompletionStore) {
+    private func configurePanels(
+        store: CompletionStore,
+        languageSettings: LanguageSettings
+    ) {
         configureBasePanel(notesPanel)
         notesPanel.level = .floating
         notesPanel.animationBehavior = .utilityWindow
-        notesPanel.contentView = NSHostingView(rootView: FloatingQueueView(store: store))
+        notesPanel.contentView = NSHostingView(
+            rootView: FloatingQueueView(
+                store: store,
+                languageSettings: languageSettings
+            )
+        )
 
         configureBasePanel(controlPanel)
         controlPanel.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
         controlPanel.acceptsMouseMovedEvents = true
         controlPanel.animationBehavior = .none
         let controlView = CairnControlHostingView(
-            rootView: CairnControlView(store: store, presenter: self),
+            rootView: CairnControlView(
+                store: store,
+                presenter: self,
+                languageSettings: languageSettings
+            ),
             presenter: self
         )
         controlPanel.contentView = controlView
@@ -659,6 +685,7 @@ final class FloatingQueuePresenter: ObservableObject {
 private struct CairnControlView: View {
     @ObservedObject var store: CompletionStore
     @ObservedObject var presenter: FloatingQueuePresenter
+    @ObservedObject var languageSettings: LanguageSettings
     @State private var isHovering = false
 
     private var badgeText: String {
@@ -970,6 +997,7 @@ private struct FloatingQueueView: View {
     static let verticalPadding = Cairn.Space.lg * 2
 
     @ObservedObject var store: CompletionStore
+    @ObservedObject var languageSettings: LanguageSettings
     @State private var scrollMetrics = QueueScrollMetrics()
     @State private var indicatorVisible = false
     @State private var indicatorHideTask: Task<Void, Never>?
@@ -1261,16 +1289,7 @@ private struct MenuBarQueueView: View {
     @ObservedObject var presenter: FloatingQueuePresenter
     @ObservedObject var updateChecker: UpdateChecker
     @ObservedObject var permissions: PermissionExperience
-
-    private var completionStatus: String {
-        guard !store.completions.isEmpty else {
-            return L10n.string("menu.quietly_listening")
-        }
-        let key = store.completions.count == 1
-            ? "menu.active_notes.one"
-            : "menu.active_notes.many"
-        return L10n.format(key, store.completions.count)
-    }
+    @ObservedObject var languageSettings: LanguageSettings
 
     private var listenerStatusLabel: String {
         switch store.listenerStatus {
@@ -1293,13 +1312,8 @@ private struct MenuBarQueueView: View {
                 Image(nsImage: CairnMenuBarIcon.shared)
                     .foregroundStyle(Cairn.Ink.secondary)
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Cairn")
-                        .font(Cairn.Typo.title)
-                    Text(completionStatus)
-                        .font(Cairn.Typo.meta)
-                        .foregroundStyle(Cairn.Ink.secondary)
-                }
+                Text("Cairn")
+                    .font(Cairn.Typo.title)
 
                 Spacer()
 
@@ -1315,35 +1329,6 @@ private struct MenuBarQueueView: View {
                 UpdateAvailableRow(update: update) {
                     updateChecker.skip(update)
                 }
-            }
-
-            Divider()
-
-            if store.completions.isEmpty {
-                VStack(spacing: Cairn.Space.md) {
-                    Image(systemName: "wind")
-                        .font(.title2)
-                        .foregroundStyle(Cairn.Ink.tertiary)
-                    Text(L10n.string("menu.no_notes"))
-                        .font(.subheadline)
-                    Text(L10n.string("menu.notes_appear"))
-                        .font(Cairn.Typo.meta)
-                        .foregroundStyle(Cairn.Ink.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Cairn.Space.xxl + Cairn.Space.sm)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: Cairn.Space.xxs) {
-                        ForEach(store.completions, id: \.sessionKey) { completion in
-                            MenuBarCompletionRow(completion: completion) {
-                                store.dismiss(sessionKey: completion.sessionKey)
-                            }
-                        }
-                    }
-                    .padding(Cairn.Space.md)
-                }
-                .frame(maxHeight: Cairn.Metrics.menuListMaxHeight)
             }
 
             Divider()
@@ -1377,6 +1362,8 @@ private struct MenuBarQueueView: View {
                 }
                 .buttonStyle(.plain)
 
+                LanguageMenu(settings: languageSettings)
+
                 Button {
                     NSApp.terminate(nil)
                 } label: {
@@ -1405,6 +1392,32 @@ private struct MenuBarQueueView: View {
             .padding(.bottom, Cairn.Space.md)
         }
         .frame(width: Cairn.Metrics.menuWidth)
+    }
+}
+
+private struct LanguageMenu: View {
+    @ObservedObject var settings: LanguageSettings
+
+    var body: some View {
+        Menu {
+            ForEach(AppLanguage.allCases) { language in
+                Button {
+                    settings.select(language)
+                } label: {
+                    if language == settings.selection {
+                        Label(language.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(language.displayName)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "globe")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help(L10n.string("language.menu"))
+        .accessibilityLabel(L10n.string("language.menu"))
     }
 }
 
@@ -1498,58 +1511,6 @@ private struct UpdateCheckControl: View {
         .foregroundStyle(color)
         .disabled(status == .checking)
         .help(help)
-    }
-}
-
-private struct MenuBarCompletionRow: View {
-    let completion: CodexCompletion
-    let onDismiss: () -> Void
-
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var agent: Cairn.Agent {
-        completion.identity
-    }
-
-    var body: some View {
-        HStack(spacing: Cairn.Space.md) {
-            RoundedRectangle(cornerRadius: Cairn.Space.xxs)
-                .fill(agent.tone.rail(colorScheme))
-                .frame(width: Cairn.Space.xs, height: 36)
-
-            VStack(alignment: .leading, spacing: Cairn.Space.xxs) {
-                HStack(spacing: Cairn.Space.xs) {
-                    Text(agent.name)
-                        .font(Cairn.Typo.label)
-                        .foregroundStyle(agent.tone.label(colorScheme))
-                    Text("· \(completion.contextName)")
-                        .font(Cairn.Typo.meta)
-                        .foregroundStyle(Cairn.Ink.tertiary)
-                        .lineLimit(1)
-                }
-                Text(completion.result.singleLine)
-                    .font(Cairn.Typo.meta)
-                    .foregroundStyle(Cairn.Ink.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: Cairn.Space.sm)
-
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .font(Cairn.Typo.glyph)
-                    .frame(width: 20, height: 20)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Cairn.Ink.tertiary)
-        }
-        .padding(.horizontal, Cairn.Space.sm)
-        .padding(.vertical, Cairn.Space.sm)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            TrailFinder.follow(completion)
-        }
-        .help(L10n.string("note.follow"))
     }
 }
 

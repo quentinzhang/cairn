@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/zsh -f
 set -euo pipefail
 
 # Package a distributable Cairn: Developer ID signing, notarization, stapling,
@@ -6,9 +6,9 @@ set -euo pipefail
 # ready. Nothing here is publishable until spctl accepts it.
 #
 # Credentials can come from either a notarytool keychain profile or an
-# App Store Connect API key already exposed through ASC_KEY_PATH, ASC_KEY_ID,
-# and ASC_ISSUER_ID. The latter avoids copying an existing private key into
-# another persistent keychain item.
+# App Store Connect Team API key already exposed through ASC_KEY_PATH,
+# ASC_KEY_ID, and ASC_ISSUER_ID. Individual API keys cannot use notarytool.
+# API-key mode avoids copying a private key into a persistent keychain item.
 #
 # Two artifacts, on purpose:
 #   .zip  stapled, signature-preserving (ditto), what an updater downloads
@@ -31,7 +31,7 @@ Usage: ./Scripts/package_release.sh [options]
   --build <number>         Set CFBundleVersion before building.
   --notary-profile <name>  notarytool keychain profile. Or set CAIRN_NOTARY_PROFILE.
                            Alternatively set ASC_KEY_PATH, ASC_KEY_ID, and
-                           ASC_ISSUER_ID for API-key authentication.
+                           ASC_ISSUER_ID for Team API-key authentication.
   --sign-identity <name>   Developer ID identity. Or set CAIRN_SIGN_IDENTITY.
   --skip-notarization      Build and sign only. Produces artifacts Gatekeeper
                            will reject — for verifying the pipeline, never for
@@ -65,7 +65,12 @@ for tool in codesign ditto hdiutil shasum spctl xcrun /usr/libexec/PlistBuddy; d
 done
 
 notary_arguments=()
-if [[ -n "$notary_profile" ]]; then
+api_key_configured=0
+[[ -n "${ASC_KEY_PATH:-}" || -n "${ASC_KEY_ID:-}" || -n "${ASC_ISSUER_ID:-}" ]] && \
+  api_key_configured=1
+if [[ -n "$notary_profile" && "$api_key_configured" == 1 ]]; then
+  die "Choose one notarization method: CAIRN_NOTARY_PROFILE or ASC_KEY_* variables, not both."
+elif [[ -n "$notary_profile" ]]; then
   notary_arguments=(--keychain-profile "$notary_profile")
 elif [[ -n "${ASC_KEY_PATH:-}" && -n "${ASC_KEY_ID:-}" && -n "${ASC_ISSUER_ID:-}" ]]; then
   [[ -f "$ASC_KEY_PATH" ]] || die "ASC_KEY_PATH does not point to a file."
@@ -75,7 +80,7 @@ elif [[ -n "${ASC_KEY_PATH:-}" && -n "${ASC_KEY_ID:-}" && -n "${ASC_ISSUER_ID:-}
     --issuer "$ASC_ISSUER_ID"
   )
 elif (( ! skip_notarization )); then
-  die "Set a notary profile or ASC_KEY_PATH, ASC_KEY_ID, and ASC_ISSUER_ID."
+  die "Set a notary profile or the Team API Key tuple: ASC_KEY_PATH, ASC_KEY_ID, and ASC_ISSUER_ID."
 fi
 
 security find-identity -v -p codesigning | grep -qF "$sign_identity" || \

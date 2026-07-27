@@ -37,8 +37,8 @@ Set the profile name once in the shell that performs releases:
 export CAIRN_NOTARY_PROFILE=cairn-notary
 ```
 
-As an alternative, use an existing App Store Connect API key without creating
-another keychain item:
+As an alternative, use an existing App Store Connect Team API key without
+creating another keychain item:
 
 ```bash
 export ASC_KEY_PATH=/absolute/path/to/AuthKey_KEYID.p8
@@ -47,7 +47,14 @@ export ASC_ISSUER_ID=ISSUER_UUID
 ```
 
 The release scripts accept either authentication method and never copy or
-print the API key.
+print the API key. Do not configure `CAIRN_NOTARY_PROFILE` and `ASC_KEY_*` at
+the same time; the scripts reject ambiguous authentication instead of silently
+using a different credential than the one being tested.
+
+App Store Connect Individual API keys cannot use `notarytool`; Cairn requires
+a Team API key with its Issuer UUID when API-key authentication is selected.
+The release scripts run zsh with startup files disabled so stale `ASC_*` values
+in `~/.zshenv` cannot silently replace the explicitly selected method.
 
 The default signing identity is:
 
@@ -59,6 +66,21 @@ Override it with `CAIRN_SIGN_IDENTITY` only if the official signing identity
 changes.
 
 ## Publish a new App version
+
+AI agents must use the repository release skill instead of reconstructing the
+workflow from memory:
+
+```text
+.agents/skills/cairn-release/SKILL.md
+```
+
+Run its read-only gates before mutating the release:
+
+```bash
+.agents/skills/cairn-release/scripts/preflight.sh source
+.agents/skills/cairn-release/scripts/preflight.sh credentials
+.agents/skills/cairn-release/scripts/preflight.sh release --version 0.7.0
+```
 
 Start from a clean `main` branch:
 
@@ -96,6 +118,13 @@ The build number normally increments automatically. To choose it explicitly:
 Do not create tags or upload files by hand before running the script. The App
 uses the latest GitHub Release tag as its update source, and expects tags in
 `vX.Y.Z` form.
+
+After publication, verify fresh public downloads rather than reusing local
+artifacts:
+
+```bash
+.agents/skills/cairn-release/scripts/verify_release.sh 0.7.0 <build>
+```
 
 ## Update the website
 

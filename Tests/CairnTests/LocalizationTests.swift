@@ -86,3 +86,46 @@ func buildVersionUsesTheRequestedLocale() {
             == "バージョン 0.6.3（15）"
     )
 }
+
+@Test
+@MainActor
+func languageSelectionPersistsAndCanReturnToTheSystem() throws {
+    let suiteName = "app.cairn.tests.language.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let settings = LanguageSettings(defaults: defaults)
+    #expect(settings.selection == .system)
+    #expect(L10n.preferredLocaleIdentifier(defaults: defaults) == nil)
+
+    settings.select(.japanese)
+    #expect(settings.selection == .japanese)
+    #expect(defaults.string(forKey: LanguageSettings.preferenceKey) == "ja")
+    #expect(LanguageSettings(defaults: defaults).selection == .japanese)
+    #expect(L10n.preferredLocaleIdentifier(defaults: defaults) == "ja")
+    #expect(L10n.string("language.menu", defaults: defaults) == "言語")
+
+    settings.select(.system)
+    #expect(settings.selection == .system)
+    #expect(defaults.object(forKey: LanguageSettings.preferenceKey) == nil)
+    #expect(L10n.preferredLocaleIdentifier(defaults: defaults) == nil)
+}
+
+@Test
+@MainActor
+func unsupportedSavedLanguageFallsBackToTheSystem() throws {
+    let suiteName = "app.cairn.tests.language.invalid.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    defaults.set("ko", forKey: LanguageSettings.preferenceKey)
+
+    #expect(LanguageSettings(defaults: defaults).selection == .system)
+    #expect(L10n.preferredLocaleIdentifier(defaults: defaults) == nil)
+}
+
+@Test
+func languageMenuUsesNativeNamesForExplicitChoices() {
+    #expect(AppLanguage.english.displayName == "English")
+    #expect(AppLanguage.simplifiedChinese.displayName == "简体中文")
+    #expect(AppLanguage.japanese.displayName == "日本語")
+}

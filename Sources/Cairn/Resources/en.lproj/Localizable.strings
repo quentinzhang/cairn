@@ -15,16 +15,14 @@
 
 "note.dismiss" = "Dismiss this note";
 "note.follow" = "Click to go back to where this ran";
-"menu.quietly_listening" = "Quietly listening";
-"menu.active_notes.one" = "%d active note";
-"menu.active_notes.many" = "%d active notes";
-"menu.no_notes" = "No notes waiting";
-"menu.notes_appear" = "Completed agent turns will appear here.";
 "menu.collapse_notes" = "Collapse notes";
 "menu.expand_notes" = "Expand notes";
 "menu.clear" = "Clear";
 "menu.access" = "Access";
 "menu.quit" = "Quit Cairn";
+
+"language.menu" = "Language";
+"language.follow_system" = "Follow System";
 
 "update.available" = "Update available";
 "update.version_format" = "Cairn %@";

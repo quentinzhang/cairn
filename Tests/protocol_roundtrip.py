@@ -319,14 +319,21 @@ notify_cairn(
     user_message="ship it",
     assistant_response="shipped",
     model="hermes-x",
-    platform="desktop",
+    platform="dashboard",
 )
 notify_cairn(session_id="hermes-2", assistant_response="   ")
 """.format(repo=str(REPO))
     try:
         finished = subprocess.run(
             [sys.executable, "-c", code],
-            env=dict(os.environ, HOME=str(home)),
+            env=dict(
+                os.environ,
+                HOME=str(home),
+                HERMES_TUI_DASHBOARD="1",
+                HERMES_TUI_SIDECAR_URL="ws://127.0.0.1:9119/api/pub?token=secret&channel=chat",
+                HERMES_DASHBOARD_PUBLIC_URL="",
+                HERMES_HOME=str(home / ".hermes" / "profiles" / "research"),
+            ),
             capture_output=True,
             text=True,
             timeout=30,
@@ -343,8 +350,13 @@ notify_cairn(session_id="hermes-2", assistant_response="   ")
         )
         for payload in payloads:
             check(
-                payload["source"] == "hermes" and payload["platform"] == "desktop",
+                payload["source"] == "hermes" and payload["platform"] == "dashboard",
                 "HermesPlugin: source/platform must pass through",
+            )
+            check(
+                payload.get("locator", {}).get("web_url")
+                == "http://127.0.0.1:9119?profile=research",
+                "HermesPlugin: dashboard turns must preserve a credential-free web URL",
             )
     finally:
         shutil.rmtree(home, ignore_errors=True)

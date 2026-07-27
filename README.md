@@ -26,7 +26,7 @@ turn ran in.
 - **Colour-coded by agent.** Codex teal, Hermes violet, Claude Code terracotta,
   OpenClaw blue.
 - **Speaks your Mac's language.** English, Simplified Chinese, and Japanese,
-  following the system or per-app setting.
+  with an in-app language selector that can also follow the system setting.
 - **寻迹 — follow the trail back.** Clicking a note returns you to where the turn
   ran: the exact Terminal/iTerm2 session, the hosting app window, or — for a
   Codex desktop turn — the exact conversation via `codex://threads/<session_id>`.

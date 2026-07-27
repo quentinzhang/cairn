@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { shouldPublishCompletion } from "./index.js";
+import { buildGatewayWebURL, shouldPublishCompletion } from "./index.js";
 
 const successfulEvent = {
   success: true,
   runId: "run-user-turn",
   messages: [],
 };
+
+test("builds the official session-level Control UI URL", () => {
+  assert.equal(
+    buildGatewayWebURL(18789, "agent:main:webchat:conversation-1"),
+    "http://127.0.0.1:18789/chat?session=agent%3Amain%3Awebchat%3Aconversation-1",
+  );
+});
 
 test("publishes a normal user-facing webchat turn", () => {
   assert.equal(
