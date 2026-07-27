@@ -276,7 +276,9 @@ case "$MODE" in
     [[ "$(gh repo view "$GITHUB_REPOSITORY" --json visibility --jq .visibility)" == "PUBLIC" ]] || \
       fail "$GITHUB_REPOSITORY is not public."
     origin_repository="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || true)"
-    [[ "${origin_repository,,}" == "${GITHUB_REPOSITORY,,}" ]] || \
+    normalized_origin_repository="$(printf '%s' "$origin_repository" | tr '[:upper:]' '[:lower:]')"
+    normalized_expected_repository="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+    [[ "$normalized_origin_repository" == "$normalized_expected_repository" ]] || \
       fail "Origin resolves to $origin_repository, expected $GITHUB_REPOSITORY."
 
     git fetch --quiet origin main --tags
