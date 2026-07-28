@@ -208,16 +208,21 @@ extension Cairn {
             hue.opacity(scheme == .dark ? washDark : washLight)
         }
 
+        /// Graphite, because OpenAI's mark has no colour to borrow — and
+        /// because the teal Codex used to wear was Cairn's own jade, which
+        /// made every Codex note look like a message from the app itself.
         static let codex = Tone(
-            hue: Color(hex: 0x148C7A),
-            railLight: Color(hex: 0x148C7A),
-            railDark: Color(hex: 0x1FBFA3),
-            labelLight: Color(hex: 0x0E6B5C),
-            labelDark: Color(hex: 0x3FD6BA),
+            hue: Color(hex: 0x5A6B75),
+            railLight: Color(hex: 0x4E5F6A),
+            railDark: Color(hex: 0x8FA3AE),
+            labelLight: Color(hex: 0x3D4C55),
+            labelDark: Color(hex: 0xA8BAC4),
             washLight: 0.10,
             washDark: 0.16
         )
 
+        /// Purple by Cairn's choice: Nous Research brands Hermes in black and
+        /// white, so there is nothing to match and a free hue to spend.
         static let hermes = Tone(
             hue: Color(hex: 0x8059DB),
             railLight: Color(hex: 0x7A4FD6),
@@ -228,16 +233,22 @@ extension Cairn {
             washDark: 0.16
         )
 
+        /// Anthropic's clay. The one tone here that is straightforwardly its
+        /// agent's own colour.
         static let claudeCode = Tone(
-            hue: Color(hex: 0xC75C40),
-            railLight: Color(hex: 0xC75C40),
-            railDark: Color(hex: 0xDE7050),
-            labelLight: Color(hex: 0xA8442C),
-            labelDark: Color(hex: 0xE8886A),
+            hue: Color(hex: 0xD97757),
+            railLight: Color(hex: 0xC2643E),
+            railDark: Color(hex: 0xE08A66),
+            labelLight: Color(hex: 0x9E4C28),
+            labelDark: Color(hex: 0xF0A585),
             washLight: 0.10,
             washDark: 0.16
         )
 
+        /// Blue, though OpenClaw's lobster is red. Tried the red: at wash
+        /// strength it is the same pink as Claude Code's clay, and telling
+        /// four agents apart is the only job this colour has. The mark carries
+        /// the brand; the tone carries the difference.
         static let openClaw = Tone(
             hue: Color(hex: 0x1F78BF),
             railLight: Color(hex: 0x1F78BF),
@@ -260,24 +271,26 @@ extension Cairn {
         )
     }
 
-    /// One place defines what an agent is called and what colour it owns.
-    /// Compact note headers use the explicit name instead of a proxy glyph.
+    /// One place defines what an agent is called, what colour it owns, and —
+    /// through `id` — which mark `AgentIconAsset` draws for it. The note
+    /// `source` is the canonical key: every other id in the app maps onto it.
     struct Agent {
+        let id: String
         let name: String
         let tone: Tone
 
         static func identity(for source: String) -> Agent {
             switch source {
             case "codex":
-                Agent(name: "Codex", tone: .codex)
+                Agent(id: source, name: "Codex", tone: .codex)
             case "hermes":
-                Agent(name: "Hermes", tone: .hermes)
+                Agent(id: source, name: "Hermes", tone: .hermes)
             case "claude-code":
-                Agent(name: "Claude Code", tone: .claudeCode)
+                Agent(id: source, name: "Claude Code", tone: .claudeCode)
             case "openclaw":
-                Agent(name: "OpenClaw", tone: .openClaw)
+                Agent(id: source, name: "OpenClaw", tone: .openClaw)
             default:
-                Agent(name: source.capitalized, tone: .unknown)
+                Agent(id: source, name: source.capitalized, tone: .unknown)
             }
         }
     }
@@ -313,6 +326,13 @@ extension Cairn {
         static let notePanelWidth: CGFloat = 384
         static let noteCardHeight: CGFloat = 108
         static let noteCardSpacing: CGFloat = 8
+        /// Agent marks. Three sizes because three surfaces: beside a menu's
+        /// meta text, beside a note's label, and leading a window row whose
+        /// text is a subheadline.
+        static let agentGlyphMenu: CGFloat = 13
+        static let agentGlyphNote: CGFloat = 12
+        static let agentGlyphRow: CGFloat = 16
+
         static let noteRailWidth: CGFloat = 3
         static let noteRailHeight: CGFloat = 54
         /// The pill that clears the whole queue, pinned under the stack.

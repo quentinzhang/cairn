@@ -258,17 +258,28 @@ Four agents, four hues, plus a fallback for sources Cairn hasn't been taught.
 A tone is not one colour — it is one **identity hue** plus the variants that
 measure correctly on a card tinted with that same hue.
 
-Compact note headers deliberately use no agent logo or substitute SF Symbol.
-The rail, wash, and explicit agent name already identify the source; a tiny
-metaphorical glyph adds noise and can misrepresent the product. Official brand
-marks belong only on larger integration or onboarding surfaces where they can
-be shown accurately.
+A tone is only half the identity — the other half is the agent's own mark. See
+§3.1. Never a substitute SF Symbol: a metaphorical glyph adds noise and
+misrepresents the product.
+
+Two of these hues are the agent's own colour and two are Cairn's choice, for
+reasons worth keeping straight:
+
+- **Claude Code** is Anthropic's clay. Straightforwardly its own.
+- **Codex** is graphite because OpenAI's mark has no colour to borrow. It also
+  fixes an older mistake: Codex used to wear a teal within a few points of
+  `Brand.jade`, so its notes read as messages from Cairn itself.
+- **OpenClaw** is blue though its lobster is red. At wash strength that red is
+  the same pink as Claude Code's clay, and telling four agents apart is the
+  only job this colour has.
+- **Hermes** is purple by choice: Nous Research brands it black and white, so
+  there is nothing to match and a free hue to spend.
 
 | Agent | Hue | Rail (light / dark) | Label (light / dark) |
 | --- | --- | --- | --- |
-| Codex | `#148C7A` | `#148C7A` / `#1FBFA3` | `#0E6B5C` / `#3FD6BA` |
+| Codex | `#5A6B75` | `#4E5F6A` / `#8FA3AE` | `#3D4C55` / `#A8BAC4` |
 | Hermes | `#8059DB` | `#7A4FD6` / `#9B78EE` | `#6541C4` / `#A98CF5` |
-| Claude Code | `#C75C40` | `#C75C40` / `#DE7050` | `#A8442C` / `#E8886A` |
+| Claude Code | `#D97757` | `#C2643E` / `#E08A66` | `#9E4C28` / `#F0A585` |
 | OpenClaw | `#1F78BF` | `#1F78BF` / `#3E96D8` | `#1A5F97` / `#5CACE8` |
 | Unknown | `#D18529` | `#B5721E` / `#E09A38` | `#8A5410` / `#E8AC55` |
 
@@ -281,16 +292,39 @@ dark, composited with the wash):
 
 | Agent | Label light | Label dark | Rail light | Rail dark |
 | --- | --- | --- | --- | --- |
-| Codex | 5.08 | 6.76 | 3.29 | 5.30 |
-| Hermes | 5.32 | 4.65 | 4.22 | 3.78 |
-| Claude Code | 4.71 | 4.86 | 3.30 | 3.90 |
-| OpenClaw | 5.28 | 5.07 | 3.67 | 3.91 |
-| Unknown | 5.08 | 5.77 | 3.16 | 4.88 |
+| Codex | 6.97 | 6.37 | 5.19 | 4.87 |
+| Hermes | 5.31 | 4.67 | 4.21 | 3.80 |
+| Claude Code | 4.83 | 5.84 | 3.27 | 4.48 |
+| OpenClaw | 5.28 | 5.09 | 3.67 | 3.92 |
+| Unknown | 5.08 | 5.79 | 3.17 | 4.90 |
 
 Labels clear WCAG AA 4.5:1 for body text; rails clear 3:1 for non-text UI. The
 card sits on `.ultraThinMaterial` over unknown wallpaper, so these are modelled
 values, not device measurements — treat them as the floor the tokens were
 designed to, and re-run the check in `Scripts/` terms if you change a hue.
+
+### Agent marks
+
+Each agent's own logo, in `Sources/Cairn/Resources/AgentIcons/`, drawn by
+`AgentGlyph`. Three surfaces show one: the menu bar's connected count (13pt),
+a note header (12pt), a connect window row (16pt).
+
+Every file is a **silhouette**, loaded as a template image so only its alpha
+survives, and tinted from the agent's own `Tone`. That is one file for light
+and dark, and it is what stops a borrowed brand from bringing a fifth and sixth
+colour into a palette whose hues already mean something. It also rules out any
+mark whose meaning depends on its own colours or on overlaid detail — OpenClaw
+ships two lobsters, and only the menu bar template one keeps its eyes when
+flattened to alpha.
+
+An agent with no usable vector mark falls back to a **lettermark**: a washed
+tile in the agent's tone with its initial. Washed, not solid, because beside
+line-art logos a filled chip is the heaviest thing in the row, and the agent
+without a mark is the last one that should shout. Never invent or trace a logo
+to fill the gap — the fallback is the honest answer.
+
+Marks are third-party trademarks used to identify an integration.
+`Resources/AgentIcons/ATTRIBUTION.md` records where each came from.
 
 ### Ink and stroke
 
@@ -425,7 +459,7 @@ authoritative place to read, follow, and dismiss completed turns.
 
 ## 9. Adding an agent
 
-One entry, one place:
+The note `source` is the canonical key. Everything else maps onto it.
 
 ```swift
 // DesignSystem.swift
@@ -437,13 +471,22 @@ static let newAgent = Tone(
 )
 
 case "new-agent":
-    Agent(name: "New Agent", tone: .newAgent)
+    Agent(id: source, name: "New Agent", tone: .newAgent)
 ```
 
 Pick the hue for separability against the four that exist — the queue's whole
-job is telling four agents apart in peripheral vision. Then derive the four
-variants by moving lightness until the ratios clear, and record them in the
-table in §3. Nothing else in the app needs to change.
+job is telling four agents apart in peripheral vision. Prefer the agent's own
+brand colour, but separability wins when the two conflict; say which you chose
+and why, next to the tone. Then derive the four variants by moving lightness
+until the ratios clear, and record them in the table in §3.
+
+A mark is optional. To add one, drop a silhouette SVG in
+`Resources/AgentIcons/`, name it in `AgentIconAsset`, and credit it in that
+directory's `ATTRIBUTION.md`. Skip all three and the agent gets a lettermark —
+which is the right outcome when no accurate vector mark exists.
+
+If the agent also connects through the window, add an `AgentRuntimeIdentity`
+whose `toneSource` is this `source`.
 
 ---
 

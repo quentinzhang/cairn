@@ -1473,6 +1473,8 @@ private struct CompletionNote: View {
         VStack(alignment: .leading, spacing: Cairn.Space.sm) {
             HStack(spacing: Cairn.Space.sm) {
                 HStack(spacing: Cairn.Space.xs) {
+                    AgentGlyph(agent: agent, size: Cairn.Metrics.agentGlyphNote)
+
                     Text(agent.name)
                         .font(Cairn.Typo.label)
                         .foregroundStyle(agent.tone.label(colorScheme))
@@ -1634,7 +1636,10 @@ private struct MenuBarQueueView: View {
                     // disappear along with the question when nothing is
                     // connected.
                     HStack(spacing: Cairn.Space.sm) {
-                        AgentGlyphStrip(runtimeIDs: connections.connectedAgentIDs)
+                        AgentGlyphStrip(
+                            agents: connections.connectedAgents,
+                            size: Cairn.Metrics.agentGlyphMenu
+                        )
 
                         Text(L10n.format("menu.connect_count", connections.connectedAgentCount))
                             .font(Cairn.Typo.meta.monospacedDigit())

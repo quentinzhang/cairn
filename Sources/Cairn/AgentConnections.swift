@@ -330,14 +330,16 @@ final class AgentConnectionCenter: ObservableObject {
 
     /// Which coding agents are actually sending Cairn their turns, in the fixed
     /// order — what the menu bar draws marks for.
-    var connectedAgentIDs: [String] {
-        agents.filter(\.isConnected).map(\.id)
+    var connectedAgents: [Cairn.Agent] {
+        agents.filter(\.isConnected).map {
+            .identity(for: AgentRuntimeIdentity.identity(for: $0.id).toneSource)
+        }
     }
 
     /// How many coding agents are actually sending Cairn their turns — the one
     /// number the menu bar shows.
     var connectedAgentCount: Int {
-        connectedAgentIDs.count
+        connectedAgents.count
     }
 
     func status(for id: String) -> AgentConnectionStatus? {
@@ -744,6 +746,10 @@ private struct AgentConnectionRow: View {
     let connect: () -> Void
     let disconnect: () -> Void
 
+    private var agent: Cairn.Agent {
+        .identity(for: identity.toneSource)
+    }
+
     private var caption: String? {
         var lines: [String] = []
         if let issue = status.issue, let text = Self.localized("connect.issue.\(issue)") {
@@ -768,6 +774,8 @@ private struct AgentConnectionRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Cairn.Space.xs) {
             HStack(spacing: Cairn.Space.md) {
+                AgentGlyph(agent: agent, size: Cairn.Metrics.agentGlyphRow)
+
                 Text(identity.name)
                     .font(.subheadline.weight(.semibold))
 

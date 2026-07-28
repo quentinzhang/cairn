@@ -16,24 +16,24 @@ import SwiftUI
 /// any agent Cairn meets later — falls back to a lettermark rather than to a
 /// borrowed or invented logo.
 enum AgentIconAsset {
-    /// Resource base names, by connection runtime id. A runtime missing here
-    /// is not an error; it draws as a lettermark.
+    /// Resource base names, by note source — the same key `Cairn.Agent` uses.
+    /// A source missing here is not an error; it draws as a lettermark.
     private static let names: [String: String] = [
         "codex": "AgentIcon-codex",
-        "claude": "AgentIcon-claude",
+        "claude-code": "AgentIcon-claude",
         "openclaw": "AgentIcon-openclaw"
     ]
 
     @MainActor private static var cache: [String: NSImage] = [:]
 
-    /// The mark for a runtime id, or nil when Cairn ships none for it.
+    /// The mark for an agent, or nil when Cairn ships none for it.
     ///
     /// Cached because a menu redraws on every hover and `NSImage` re-reads the
     /// file each time it is created.
     @MainActor
-    static func image(for runtimeID: String) -> NSImage? {
-        if let cached = cache[runtimeID] { return cached }
-        guard let name = names[runtimeID],
+    static func image(for source: String) -> NSImage? {
+        if let cached = cache[source] { return cached }
+        guard let name = names[source],
               let url = CairnResources.bundle.url(
                 forResource: name,
                 withExtension: "svg"
@@ -42,13 +42,13 @@ enum AgentIconAsset {
             return nil
         }
         image.isTemplate = true
-        cache[runtimeID] = image
+        cache[source] = image
         return image
     }
 
-    /// Runtime ids Cairn ships a mark for — what the tests check against
-    /// `AgentRuntimeIdentity.all`.
-    static var shippedRuntimeIDs: Set<String> { Set(names.keys) }
+    /// Sources Cairn ships a mark for — what the tests check against the
+    /// agents `Cairn.Agent` knows.
+    static var shippedSources: Set<String> { Set(names.keys) }
 }
 
 // MARK: - Glyph
@@ -59,22 +59,16 @@ enum AgentIconAsset {
 /// The lettermark is a filled tile rather than bare text: next to three logos,
 /// a floating glyph reads as a rendering failure, and a tile reads as an icon.
 struct AgentGlyph: View {
-    let runtimeID: String
+    let agent: Cairn.Agent
     var size: CGFloat = 13
 
     @Environment(\.colorScheme) private var scheme
 
-    private var identity: AgentRuntimeIdentity {
-        AgentRuntimeIdentity.identity(for: runtimeID)
-    }
-
-    private var tint: Color {
-        Cairn.Agent.identity(for: identity.toneSource).tone.rail(scheme)
-    }
+    private var tint: Color { agent.tone.rail(scheme) }
 
     var body: some View {
         Group {
-            if let image = AgentIconAsset.image(for: runtimeID) {
+            if let image = AgentIconAsset.image(for: agent.id) {
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)
@@ -85,7 +79,7 @@ struct AgentGlyph: View {
             }
         }
         .frame(width: size, height: size)
-        .accessibilityLabel(identity.name)
+        .accessibilityLabel(agent.name)
     }
 
     /// A washed tile rather than a solid one: beside line-art logos, a solid
@@ -99,7 +93,7 @@ struct AgentGlyph: View {
                     .strokeBorder(tint.opacity(0.55), lineWidth: Cairn.Stroke.width)
             }
             .overlay {
-                Text(identity.name.prefix(1))
+                Text(agent.name.prefix(1))
                     .font(.system(size: size * 0.60, weight: .semibold))
                     .foregroundStyle(tint)
             }
@@ -111,13 +105,13 @@ struct AgentGlyph: View {
 /// Deliberately not a count: the number is already next to it, and repeating
 /// it in dots would spend the same pixels saying less.
 struct AgentGlyphStrip: View {
-    let runtimeIDs: [String]
+    let agents: [Cairn.Agent]
     var size: CGFloat = 13
 
     var body: some View {
         HStack(spacing: Cairn.Space.xs) {
-            ForEach(runtimeIDs, id: \.self) { id in
-                AgentGlyph(runtimeID: id, size: size)
+            ForEach(agents, id: \.id) { agent in
+                AgentGlyph(agent: agent, size: size)
             }
         }
     }
