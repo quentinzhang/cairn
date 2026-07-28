@@ -15,6 +15,8 @@
 
 "note.dismiss" = "Dismiss this note";
 "note.follow" = "Click to go back to where this ran";
+"note.clear_all" = "Clear all";
+"note.clear_all.help" = "Dismiss every note in the queue";
 "menu.collapse_notes" = "Collapse notes";
 "menu.expand_notes" = "Expand notes";
 "menu.clear" = "Clear";
@@ -22,7 +24,6 @@
 "menu.quit" = "Quit Cairn";
 
 "language.menu" = "Language";
-"language.follow_system" = "Follow System";
 
 "update.available" = "Update available";
 "update.version_format" = "Cairn %@";
@@ -31,8 +32,6 @@
 "update.check" = "Check for Updates…";
 "update.checking" = "Checking…";
 "update.up_to_date" = "Up to date";
-"update.check_again" = "Check again";
-"update.try_again" = "Try Again";
 "update.failed" = "Couldn’t check for updates";
 
 "relative.now" = "now";
@@ -51,30 +50,80 @@
 "permission.application.not_installed" = "Not installed";
 "permission.application.not_needed" = "Not needed yet";
 
-"access.window.welcome" = "Welcome to Cairn";
 "access.window.title" = "Cairn Access";
-"access.welcome.ready" = "Cairn is ready";
-"access.welcome.no_extra_access" = "Completed agent turns can appear without extra access.";
-"access.welcome.no_monitoring" = "No screen recording or keyboard monitoring";
-"access.welcome.precise_return" = "Enable precise return when you want it";
-"access.welcome.later" = "Later";
-"access.welcome.review" = "Review Access";
 "access.title" = "Precise return";
-"access.subtitle" = "Cairn works without extra access.";
+"access.subtitle" = "Cairn works without any of these. Granting one only sharpens where a click lands.";
 "access.refresh" = "Refresh";
 "access.editor.title" = "Editor windows";
-"access.editor.detail" = "Uses Accessibility to raise the right window.";
+"access.editor.detail" = "Raise the exact window the turn ran in. Without it, the app just comes to the front.";
 "access.terminal.title" = "Terminal tabs";
 "access.terminal.short_detail" = "Return to the exact tab.";
-"access.terminal.detail" = "Uses Automation to return to the exact tab.";
+"access.terminal.detail" = "Jump to the exact Terminal tab the agent ran in. Without it, Terminal just comes to the front.";
 "access.iterm.title" = "iTerm2 sessions";
 "access.iterm.short_detail" = "Return to the exact session.";
-"access.iterm.detail" = "Uses Automation to return to the exact session.";
+"access.iterm.detail" = "Jump to the exact iTerm2 session the agent ran in. Without it, iTerm2 just comes to the front.";
 "access.browser.dynamic_title" = "%@ tabs";
 "access.browser.short_detail" = "Reuse the matching tab.";
-"access.browser.detail" = "Uses Automation to reuse the matching tab.";
+"access.browser.detail" = "Select the tab already showing the session instead of opening a new one each time.";
 "access.browser.title" = "Browser tabs";
 "access.browser.unsupported" = "Current browser is not supported.";
-"access.privacy_summary" = "No screen recording, input monitoring, or notification access.";
 "access.open_settings" = "Open Settings";
 "access.settings" = "Settings";
+
+"menu.connect" = "Apps";
+"menu.connect_count" = "%d connected";
+
+"connect.window.title" = "Connect Agents";
+"connect.title" = "Connect your coding agents";
+"connect.subtitle" = "Cairn adds one handler to each agent's own config and leaves everything else untouched.";
+"connect.refresh" = "Check again";
+"connect.empty" = "No supported agent found on this Mac yet.";
+"connect.footer" = "Disconnect only stops new notes — the ones already in the queue stay, and still lead back.";
+
+"connect.state.connected" = "Connected";
+"connect.state.available" = "Ready to connect";
+"connect.state.not_installed" = "Not installed";
+"connect.state.attention" = "Needs attention";
+"connect.state.working" = "Working…";
+
+"connect.action.connect" = "Connect";
+"connect.action.disconnect" = "Disconnect";
+"connect.action.reconnect" = "Reconnect";
+"connect.action.repair" = "Repair";
+
+
+"connect.issue.config_invalid" = "The agent's config file could not be read.";
+"connect.issue.script_missing" = "Registered, but the script it points at is gone.";
+"connect.issue.duplicate" = "Registered more than once, so turns arrive twice.";
+"connect.issue.other_source" = "Loads Cairn from another location, so updating this app will not update it. Reconnect to point it here.";
+"connect.issue.disabled" = "Registered but switched off.";
+"connect.issue.cli_missing" = "This agent's command line tool was not found.";
+"connect.issue.foreign_plugin" = "Something else already occupies Cairn's plugin slot.";
+"connect.issue.broken_link" = "The plugin link points nowhere.";
+"connect.issue.partial" = "Installed for one agent only.";
+"connect.issue.no_consent" = "Conversation access not granted yet.";
+"connect.issue.plugin_missing" = "Cairn's plugin files are missing.";
+
+"connect.followup.codex_trust" = "Run /hooks inside Codex once and trust the Cairn handler.";
+"connect.followup.openclaw_restart" = "Restart the OpenClaw desktop client if it was already running.";
+"connect.followup.hermes_enable" = "Run: hermes plugins enable cairn";
+"connect.followup.hermes_restart" = "Restart Hermes to apply this. A gateway or session already running keeps the old setting until it does.";
+
+"connect.consent.title" = "Let Cairn read OpenClaw's final message?";
+"connect.consent.body" = "OpenClaw asks before a plugin can read a conversation. Cairn keeps only the last prompt and the final reply, on this Mac.";
+"connect.consent.allow" = "Allow and Connect";
+"connect.consent.cancel" = "Cancel";
+
+"connect.failure.script_missing" = "Cairn could not find its own installer. Reinstall the app.";
+"connect.failure.timed_out" = "The agent's command line tool did not answer in time.";
+"connect.failure.unreadable" = "Cairn could not read the installer's answer.";
+
+"connect.onboarding.requirement" = "Connect at least one agent to start — closing this window quits Cairn.";
+"connect.onboarding.start" = "Start Using Cairn";
+"control.intro.drag" = "Drag the stones anywhere you like.";
+"control.intro.notes" = "When an agent finishes a task, its note appears right here.";
+"control.intro.dismiss" = "Got It";
+
+"access.onboarding.hint" = "You can change any of these later from Access in the menu.";
+"access.onboarding.skip" = "Skip";
+"access.onboarding.done" = "Done";

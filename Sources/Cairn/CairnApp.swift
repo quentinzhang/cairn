@@ -37,6 +37,7 @@ struct CairnApp: App {
     @StateObject private var presenter: FloatingQueuePresenter
     @StateObject private var updateChecker: UpdateChecker
     @StateObject private var permissions: PermissionExperience
+    @StateObject private var connections: AgentConnectionCenter
 
     init() {
         let languageSettings = LanguageSettings.shared
@@ -53,15 +54,21 @@ struct CairnApp: App {
         updateChecker.start()
         _updateChecker = StateObject(wrappedValue: updateChecker)
         _permissions = StateObject(wrappedValue: PermissionExperience.shared)
+        _connections = StateObject(wrappedValue: AgentConnectionCenter.shared)
     }
 
     var body: some Scene {
-        MenuBarExtra {
+        // Until onboarding finishes there is no menu bar icon: the connect
+        // window is the whole app, and Start is what turns the rest on.
+        MenuBarExtra(isInserted: Binding(
+            get: { connections.surfacesActive },
+            set: { _ in }
+        )) {
             MenuBarQueueView(
                 store: store,
-                presenter: presenter,
                 updateChecker: updateChecker,
                 permissions: permissions,
+                connections: connections,
                 languageSettings: languageSettings
             )
         } label: {
@@ -130,7 +137,11 @@ enum CairnMenuBarIcon {
 final class CairnAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        PermissionExperience.shared.presentWelcomeIfNeeded()
+        PermissionExperience.shared.refresh()
+        // The first launch goes straight to the one thing Cairn cannot work
+        // without: connecting an agent. Access is an optional upgrade and
+        // waits in the menu.
+        AgentConnectionCenter.shared.start()
     }
 }
 
@@ -414,10 +425,16 @@ final class FloatingQueuePresenter: ObservableObject {
 
     private let notesPanel: NSPanel
     private let controlPanel: NSPanel
+    private var hintPanel: NSPanel?
     private weak var store: CompletionStore?
     private var screenObserver: NSObjectProtocol?
     private var launchObserver: NSObjectProtocol?
+    private var onboardingObserver: NSObjectProtocol?
+    private var startObserver: NSObjectProtocol?
     private var hasFinishedLaunching = false
+    /// While onboarding gates the app, the panels stay off screen: an ignored
+    /// connect window must look like an app that has not started yet.
+    private var surfacesHeld = AgentConnectionCenter.needsOnboardingGate
     private var controlDragStart: NSPoint?
     private var attentionGeneration = 0
 
@@ -425,6 +442,7 @@ final class FloatingQueuePresenter: ObservableObject {
         static let presentsNotes = "cairn.presentsNotes"
         static let controlX = "cairn.controlPanel.x"
         static let controlY = "cairn.controlPanel.y"
+        static let controlIntroduced = "cairn.control.introduced"
     }
 
     init(store: CompletionStore, languageSettings: LanguageSettings) {
@@ -453,7 +471,7 @@ final class FloatingQueuePresenter: ObservableObject {
 
         configurePanels(store: store, languageSettings: languageSettings)
         store.onQueueChange = { [weak self] count in
-            guard let self, self.hasFinishedLaunching else { return }
+            guard let self, self.hasFinishedLaunching, !self.surfacesHeld else { return }
             self.syncPanels(itemCount: count)
         }
         store.onCompletionReceived = { [weak self] in
@@ -467,6 +485,7 @@ final class FloatingQueuePresenter: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self, let store = self.store else { return }
                 self.hasFinishedLaunching = true
+                guard !self.surfacesHeld else { return }
                 self.controlPanel.setFrame(self.initialControlFrame(), display: true)
                 self.syncPanels(itemCount: store.completions.count)
             }
@@ -482,9 +501,45 @@ final class FloatingQueuePresenter: ObservableObject {
                 self.syncPanels(itemCount: store.completions.count)
             }
         }
+        onboardingObserver = NotificationCenter.default.addObserver(
+            forName: .cairnOnboardingDidFinish,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.beginPresentingSurfaces()
+                self?.introduceControl()
+            }
+        }
+        startObserver = NotificationCenter.default.addObserver(
+            forName: .cairnAppShouldStart,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.beginPresentingSurfaces() }
+        }
+    }
+
+    /// The gate has opened: put the control on screen as if the app had just
+    /// launched, because for the user it just did.
+    private func beginPresentingSurfaces() {
+        guard surfacesHeld else { return }
+        surfacesHeld = false
+        guard hasFinishedLaunching else { return }
+        controlPanel.setFrame(initialControlFrame(), display: true)
+        syncPanels(itemCount: store?.completions.count ?? 0)
+    }
+
+    var hasNotes: Bool {
+        !(store?.completions.isEmpty ?? true)
+    }
+
+    func clearNotes() {
+        store?.clear()
     }
 
     func toggleNotes() {
+        dismissControlIntroduction()
         guard let store, !store.completions.isEmpty else { return }
         presentsNotes.toggle()
         UserDefaults.standard.set(presentsNotes, forKey: PreferenceKey.presentsNotes)
@@ -509,9 +564,76 @@ final class FloatingQueuePresenter: ObservableObject {
     }
 
     func finishControlDrag() {
+        // Dragging is the first thing the introduction teaches, so doing it
+        // is also what graduates from it.
+        dismissControlIntroduction()
         controlDragStart = nil
         UserDefaults.standard.set(controlPanel.frame.origin.x, forKey: PreferenceKey.controlX)
         UserDefaults.standard.set(controlPanel.frame.origin.y, forKey: PreferenceKey.controlY)
+    }
+
+    /// The desktop control introduces itself, once, right after the first
+    /// agent is connected. Its two facts are exactly what a first-run user
+    /// cannot discover alone: the stones can be dragged anywhere, and notes
+    /// will appear beside wherever they are put. Learned by doing (a drag or
+    /// a click) or acknowledged with the button — either way it never
+    /// returns.
+    func introduceControl() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: PreferenceKey.controlIntroduced) else { return }
+        guard hasFinishedLaunching, hintPanel == nil else { return }
+
+        let panel = NSPanel(
+            contentRect: NSRect(origin: .zero, size: .zero),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        configureBasePanel(panel)
+        panel.level = controlPanel.level
+        panel.animationBehavior = .utilityWindow
+
+        let host = NSHostingView(
+            rootView: ControlIntroductionView { [weak self] in
+                self?.dismissControlIntroduction()
+            }
+        )
+        panel.contentView = host
+        panel.setContentSize(host.fittingSize)
+        panel.setFrameOrigin(introductionOrigin(size: host.fittingSize))
+        hintPanel = panel
+
+        panel.orderFrontRegardless()
+        controlPanel.orderFrontRegardless()
+        callAttention()
+    }
+
+    func dismissControlIntroduction() {
+        guard let hintPanel else { return }
+        UserDefaults.standard.set(true, forKey: PreferenceKey.controlIntroduced)
+        hintPanel.orderOut(nil)
+        self.hintPanel = nil
+    }
+
+    /// Beside the control, on the side notes will appear — the introduction
+    /// stands exactly where what it describes is going to happen.
+    private func introductionOrigin(size: NSSize) -> NSPoint {
+        let controlFrame = controlPanel.frame
+        let screen = NSScreen.screens.first(where: { $0.frame.intersects(controlFrame) })
+            ?? activeScreen()
+        guard let visibleFrame = screen?.visibleFrame else { return .zero }
+
+        let gap = Cairn.Metrics.panelGap
+        let margin = Cairn.Metrics.screenMargin
+        let hasRoomOnLeft = controlFrame.minX - visibleFrame.minX >= size.width + gap
+        let x = hasRoomOnLeft
+            ? controlFrame.minX - size.width - gap
+            : min(controlFrame.maxX + gap, visibleFrame.maxX - size.width - margin)
+        let y = min(
+            max(controlFrame.maxY - size.height, visibleFrame.minY + margin),
+            visibleFrame.maxY - size.height - margin
+        )
+        return NSPoint(x: x, y: y)
     }
 
     private func callAttention() {
@@ -826,6 +948,47 @@ private final class CairnControlHostingView: NSHostingView<CairnControlView> {
         mouseDownLocation = nil
         didDrag = false
     }
+
+    /// Expanding and clearing act on the notes, so they belong to the control
+    /// that draws them — a left click already expands; a right click offers
+    /// the rest. The menu bar is for what Cairn *is*, not for what the queue
+    /// is doing this minute.
+    override func rightMouseDown(with event: NSEvent) {
+        guard let presenter else { return }
+
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+
+        let toggle = NSMenuItem(
+            title: presenter.presentsNotes
+                ? L10n.string("menu.collapse_notes")
+                : L10n.string("menu.expand_notes"),
+            action: #selector(toggleNotesFromMenu),
+            keyEquivalent: ""
+        )
+        toggle.target = self
+        toggle.isEnabled = presenter.hasNotes
+        menu.addItem(toggle)
+
+        let clear = NSMenuItem(
+            title: L10n.string("menu.clear"),
+            action: #selector(clearNotesFromMenu),
+            keyEquivalent: ""
+        )
+        clear.target = self
+        clear.isEnabled = presenter.hasNotes
+        menu.addItem(clear)
+
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    @objc private func toggleNotesFromMenu() {
+        presenter?.toggleNotes()
+    }
+
+    @objc private func clearNotesFromMenu() {
+        presenter?.clearNotes()
+    }
 }
 
 /// The Cairn mark: two flat river stones and a lit crown.
@@ -988,6 +1151,53 @@ private struct PebbleShape: Shape {
     }
 }
 
+/// The one-time card beside the control, wearing the same material as the
+/// notes that will later stand in its place.
+private struct ControlIntroductionView: View {
+    @Environment(\.colorScheme) private var scheme
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Cairn.Space.lg) {
+            // Wrap rather than truncate: the panel is sized from this view's
+            // fitting size, and a measured single line ends in "…" once the
+            // fixed width clamps it.
+            Label(
+                L10n.string("control.intro.drag"),
+                systemImage: "hand.draw"
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            Label(
+                L10n.string("control.intro.notes"),
+                systemImage: "text.bubble"
+            )
+            .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Spacer()
+                Button(L10n.string("control.intro.dismiss"), action: onDismiss)
+                    .buttonStyle(.borderless)
+                    .font(Cairn.Typo.label)
+                    .foregroundStyle(Cairn.Brand.jade)
+            }
+        }
+        .font(Cairn.Typo.meta)
+        .foregroundStyle(Cairn.Ink.body)
+        .padding(Cairn.Space.xl)
+        .frame(width: 264, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Cairn.Radius.card, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Cairn.Radius.card, style: .continuous)
+                .strokeBorder(Cairn.Stroke.controlResting, lineWidth: Cairn.Stroke.width)
+        )
+        .cairnShadow(.note(scheme))
+        .padding(Cairn.Space.md)
+    }
+}
+
 private struct FloatingQueueView: View {
     static let maximumQueueSize = 50
     static let maximumExpandedHeight: CGFloat = 710
@@ -995,12 +1205,25 @@ private struct FloatingQueueView: View {
     static let cardHeight = Cairn.Metrics.noteCardHeight
     static let cardSpacing = Cairn.Metrics.noteCardSpacing
     static let verticalPadding = Cairn.Space.lg * 2
+    /// Clearing the queue in one gesture is only worth its own control once
+    /// dismissing note by note is real work. At two notes the per-note × is
+    /// faster than reading a new affordance, so the pill starts at three.
+    static let clearAllThreshold = 3
+    /// The pill sits below the scroll view, so it costs the panel its own
+    /// height plus the bottom padding the stack used to own.
+    static let clearAllRowHeight = Cairn.Metrics.noteClearAllHeight + Cairn.Space.lg
 
     @ObservedObject var store: CompletionStore
     @ObservedObject var languageSettings: LanguageSettings
+    @Environment(\.colorScheme) private var colorScheme
     @State private var scrollMetrics = QueueScrollMetrics()
     @State private var indicatorVisible = false
     @State private var indicatorHideTask: Task<Void, Never>?
+    @State private var isClearHovering = false
+
+    static func showsClearAll(for itemCount: Int) -> Bool {
+        itemCount >= clearAllThreshold
+    }
 
     static func contentHeight(for itemCount: Int) -> CGFloat {
         let count = min(max(0, itemCount), maximumQueueSize)
@@ -1008,6 +1231,7 @@ private struct FloatingQueueView: View {
         return CGFloat(count) * cardHeight
             + CGFloat(max(0, count - 1)) * cardSpacing
             + verticalPadding
+            + (showsClearAll(for: count) ? clearAllRowHeight : 0)
     }
 
     private var queuedCompletions: ArraySlice<CodexCompletion> {
@@ -1015,29 +1239,91 @@ private struct FloatingQueueView: View {
     }
 
     var body: some View {
-        ScrollView(.vertical) {
-            LazyVStack(spacing: Self.cardSpacing) {
-                ForEach(queuedCompletions, id: \.sessionKey) { completion in
-                    CompletionNote(completion: completion) {
-                        withAnimation(Cairn.Motion.dismiss) {
-                            store.dismiss(sessionKey: completion.sessionKey)
+        VStack(spacing: 0) {
+            ScrollView(.vertical) {
+                LazyVStack(spacing: Self.cardSpacing) {
+                    ForEach(queuedCompletions, id: \.sessionKey) { completion in
+                        CompletionNote(completion: completion) {
+                            withAnimation(Cairn.Motion.dismiss) {
+                                store.dismiss(sessionKey: completion.sessionKey)
+                            }
                         }
+                        .id(completion.sessionKey)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .scale(scale: 0.96).combined(with: .opacity)
+                        ))
                     }
-                    .id(completion.sessionKey)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .top).combined(with: .opacity),
-                        removal: .scale(scale: 0.96).combined(with: .opacity)
-                    ))
                 }
+                .padding(Cairn.Space.lg)
+                .background(QueueScrollObserver(onChange: scrollDidChange))
             }
-            .padding(Cairn.Space.lg)
-            .background(QueueScrollObserver(onChange: scrollDidChange))
+            .scrollIndicators(.never)
+            .overlay(alignment: .topTrailing) { scrollIndicator }
+
+            if Self.showsClearAll(for: queuedCompletions.count) {
+                clearAllControl
+            }
         }
-        .scrollIndicators(.never)
-        .overlay(alignment: .topTrailing) { scrollIndicator }
         .frame(width: Cairn.Metrics.notePanelWidth)
         .frame(maxHeight: .infinity, alignment: .top)
         .animation(Cairn.Motion.enqueue, value: store.completions.map(\.sessionKey))
+    }
+
+    /// Below the stack rather than above it: notes arrive at the top, and a
+    /// control that the newest note pushes around is a control you misclick.
+    /// It stays pinned outside the scroll view so a long queue cannot bury it.
+    private var clearAllControl: some View {
+        Button {
+            withAnimation(Cairn.Motion.dismiss) {
+                store.clear()
+            }
+        } label: {
+            HStack(spacing: Cairn.Space.xs) {
+                Image(systemName: "xmark")
+                    .font(Cairn.Typo.glyph)
+                Text(L10n.string("note.clear_all"))
+                    .font(Cairn.Typo.meta)
+            }
+            .foregroundStyle(Cairn.Ink.secondary)
+            .padding(.horizontal, Cairn.Space.lg)
+            .frame(height: Cairn.Metrics.noteClearAllHeight)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(.ultraThinMaterial)
+            }
+            .overlay {
+                Capsule(style: .continuous)
+                    .strokeBorder(
+                        isClearHovering
+                            ? Color.white.opacity(colorScheme == .dark ? 0.28 : 0.72)
+                            : Cairn.Stroke.card(colorScheme),
+                        lineWidth: Cairn.Stroke.width
+                    )
+            }
+            .cairnShadow(.note(colorScheme))
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, Cairn.Space.lg)
+        .onHover { hovering in
+            isClearHovering = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .animation(Cairn.Motion.hover, value: isClearHovering)
+        // Clearing the queue takes the pill out from under the cursor, so the
+        // pointing hand has to be popped on the way out or it sticks.
+        .onDisappear {
+            if isClearHovering {
+                isClearHovering = false
+                NSCursor.pop()
+            }
+        }
+        .help(L10n.string("note.clear_all.help"))
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 
     /// Dark core with a light hairline, so the thumb reads over any wallpaper.
@@ -1286,9 +1572,9 @@ private struct CompactRelativeTime: View {
 
 private struct MenuBarQueueView: View {
     @ObservedObject var store: CompletionStore
-    @ObservedObject var presenter: FloatingQueuePresenter
     @ObservedObject var updateChecker: UpdateChecker
     @ObservedObject var permissions: PermissionExperience
+    @ObservedObject var connections: AgentConnectionCenter
     @ObservedObject var languageSettings: LanguageSettings
 
     private var listenerStatusLabel: String {
@@ -1306,118 +1592,228 @@ private struct MenuBarQueueView: View {
         }
     }
 
+    /// The listener has nothing to say while it is working. Only the two states
+    /// that stop notes from arriving are worth a row — and they replace the
+    /// header that used to spend a line telling you the app is called Cairn.
+    private var listenerNeedsAttention: Bool {
+        store.listenerStatus == "Inbox unavailable"
+            || store.listenerStatus == "Inbox needs attention"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: Cairn.Space.md) {
-                Image(nsImage: CairnMenuBarIcon.shared)
-                    .foregroundStyle(Cairn.Ink.secondary)
+            if listenerNeedsAttention {
+                Label(listenerStatusLabel, systemImage: "exclamationmark.triangle")
+                    .font(Cairn.Typo.menuRow)
+                    .foregroundStyle(Cairn.Status.degraded)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Cairn.Space.xl)
+                    .padding(.vertical, Cairn.Space.lg)
 
-                Text("Cairn")
-                    .font(Cairn.Typo.title)
-
-                Spacer()
-
-                Circle()
-                    .fill(store.listenerStatus == "Watching" ? Cairn.Status.listening : Cairn.Status.degraded)
-                    .frame(width: 7, height: 7)
-                    .help(listenerStatusLabel)
+                Divider()
             }
-            .padding(Cairn.Space.xl)
 
             if let update = updateChecker.available {
-                Divider()
                 UpdateAvailableRow(update: update) {
                     updateChecker.skip(update)
                 }
+
+                Divider()
+            }
+
+            // Setup: the three things a person changes once and forgets. The
+            // queue's own controls are not here — expanding and clearing act
+            // on the notes, so they live on the control that draws them.
+            MenuGroup {
+                MenuActionRow(
+                    title: L10n.string("menu.connect"),
+                    action: connections.presentWindow
+                ) {
+                    // The marks answer "which" and the count answers "how
+                    // many" — so the marks come first, in reading order, and
+                    // disappear along with the question when nothing is
+                    // connected.
+                    HStack(spacing: Cairn.Space.sm) {
+                        AgentGlyphStrip(runtimeIDs: connections.connectedAgentIDs)
+
+                        Text(L10n.format("menu.connect_count", connections.connectedAgentCount))
+                            .font(Cairn.Typo.meta.monospacedDigit())
+                            .foregroundStyle(
+                                connections.connectedAgentCount > 0
+                                    ? Cairn.Brand.jade
+                                    : Cairn.Ink.tertiary
+                            )
+                    }
+                }
+
+                MenuActionRow(
+                    title: L10n.string("menu.access"),
+                    action: permissions.presentCenter
+                )
+
+                MenuLanguageRow(settings: languageSettings)
             }
 
             Divider()
 
-            HStack(spacing: Cairn.Space.xl) {
-                Button {
-                    presenter.toggleNotes()
-                } label: {
-                    Label(
-                        presenter.presentsNotes
-                            ? L10n.string("menu.collapse_notes")
-                            : L10n.string("menu.expand_notes"),
-                        systemImage: presenter.presentsNotes ? "eye.slash" : "eye"
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(store.completions.isEmpty)
-
-                Button(L10n.string("menu.clear")) {
-                    store.clear()
-                }
-                .buttonStyle(.plain)
-                .disabled(store.completions.isEmpty)
-
-                Spacer()
-
-                Button {
-                    permissions.presentCenter()
-                } label: {
-                    Label(L10n.string("menu.access"), systemImage: "lock.shield")
-                }
-                .buttonStyle(.plain)
-
-                LanguageMenu(settings: languageSettings)
-
-                Button {
-                    NSApp.terminate(nil)
-                } label: {
-                    Image(systemName: "power")
-                }
-                .buttonStyle(.plain)
-                .help(L10n.string("menu.quit"))
-            }
-            .font(Cairn.Typo.meta)
-            .foregroundStyle(Cairn.Ink.secondary)
-            .padding(.horizontal, Cairn.Space.xl)
-            .padding(.vertical, Cairn.Space.lg)
-
-            HStack(spacing: Cairn.Space.md) {
+            // Version, then the check it belongs to, then the way out — the
+            // shape every menu bar app ends in.
+            MenuGroup {
+                // Not a row you can press, so not a MenuActionRow — only the
+                // inset is shared, which is what lines it up with the rest.
                 Text(CairnBuildInfo.displayVersion)
-                    .font(.caption2.monospacedDigit())
+                    .font(Cairn.Typo.menuRow.monospacedDigit())
                     .foregroundStyle(Cairn.Ink.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Cairn.Space.xl)
+                    .padding(.vertical, Cairn.Space.sm)
 
-                Spacer()
-
-                UpdateCheckControl(status: updateChecker.status) {
+                UpdateCheckRow(status: updateChecker.status) {
                     updateChecker.checkNow()
                 }
+
+                MenuActionRow(title: L10n.string("menu.quit")) {
+                    NSApp.terminate(nil)
+                }
             }
-            .padding(.horizontal, Cairn.Space.xl)
-            .padding(.bottom, Cairn.Space.md)
         }
+        .padding(.vertical, Cairn.Space.xs)
         .frame(width: Cairn.Metrics.menuWidth)
     }
 }
 
-private struct LanguageMenu: View {
-    @ObservedObject var settings: LanguageSettings
+// MARK: - Menu rows
+
+/// One band of related rows, inset from the dividers that separate it.
+private struct MenuGroup<Content: View>: View {
+    @ViewBuilder let content: Content
 
     var body: some View {
-        Menu {
-            ForEach(AppLanguage.allCases) { language in
-                Button {
-                    settings.select(language)
-                } label: {
-                    if language == settings.selection {
-                        Label(language.displayName, systemImage: "checkmark")
-                    } else {
-                        Text(language.displayName)
+        VStack(spacing: 0) { content }
+            .padding(.vertical, Cairn.Space.xs)
+    }
+}
+
+/// A full-width menu row: icon, label, and whatever the row wants to say on
+/// the right.
+///
+/// Six controls competing on one line read as a toolbar, and a toolbar is a
+/// thing you scan. A menu is a thing you read — one action per line, each with
+/// room for the one number that matters to it.
+private struct MenuActionRow<Trailing: View>: View {
+    let title: String
+    var isEnabled: Bool = true
+    let action: () -> Void
+    @ViewBuilder let trailing: Trailing
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            MenuRowLabel(
+                title: title,
+                isHighlighted: isHovering && isEnabled
+            ) {
+                trailing
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.35)
+        .onHover { hovering in
+            withAnimation(Cairn.Motion.hover) { isHovering = hovering }
+        }
+    }
+}
+
+extension MenuActionRow where Trailing == EmptyView {
+    init(
+        title: String,
+        isEnabled: Bool = true,
+        action: @escaping () -> Void
+    ) {
+        self.init(
+            title: title,
+            isEnabled: isEnabled,
+            action: action
+        ) { EmptyView() }
+    }
+}
+
+/// The language picker: an ordinary row whose right-hand side is the control.
+///
+/// The list pops over the panel rather than unfolding inside it — a menu that
+/// resizes the window it lives in makes everything below it jump. Keeping the
+/// label plain is also what keeps it aligned: a SwiftUI `Menu` centres and
+/// shrink-wraps whatever it is given, so it gets the value and the chevron and
+/// nothing else.
+private struct MenuLanguageRow: View {
+    @ObservedObject var settings: LanguageSettings
+
+    @State private var isHovering = false
+
+    var body: some View {
+        MenuRowLabel(
+            title: L10n.string("language.menu"),
+            isHighlighted: isHovering
+        ) {
+            Menu {
+                ForEach(AppLanguage.allCases) { language in
+                    Button {
+                        settings.select(language)
+                    } label: {
+                        if language == settings.selection {
+                            Label(language.displayName, systemImage: "checkmark")
+                        } else {
+                            Text(language.displayName)
+                        }
                     }
                 }
+            } label: {
+                HStack(spacing: Cairn.Space.xs) {
+                    Text(settings.selection.displayName)
+                        .font(Cairn.Typo.meta)
+                    Image(systemName: "chevron.down")
+                        .font(Cairn.Typo.glyph)
+                }
+                .foregroundStyle(Cairn.Ink.tertiary)
             }
-        } label: {
-            Image(systemName: "globe")
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            // A menu button sets its own label in the system control font
+            // unless the control itself is small — the font modifier alone is
+            // not enough to keep the value quieter than the label it follows.
+            .controlSize(.small)
+            .fixedSize()
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .help(L10n.string("language.menu"))
+        .onHover { hovering in
+            withAnimation(Cairn.Motion.hover) { isHovering = hovering }
+        }
         .accessibilityLabel(L10n.string("language.menu"))
+    }
+}
+
+private struct MenuRowLabel<Trailing: View>: View {
+    let title: String
+    let isHighlighted: Bool
+    @ViewBuilder let trailing: Trailing
+
+    var body: some View {
+        HStack(spacing: Cairn.Space.md) {
+            Text(title)
+            Spacer(minLength: Cairn.Space.sm)
+            trailing
+        }
+        .font(Cairn.Typo.menuRow)
+        .foregroundStyle(Cairn.Ink.secondary)
+        .padding(.horizontal, Cairn.Space.sm)
+        .padding(.vertical, Cairn.Space.sm)
+        .contentShape(Rectangle())
+        .background(
+            RoundedRectangle(cornerRadius: Cairn.Radius.sm, style: .continuous)
+                .fill(isHighlighted ? Cairn.Ink.secondary.opacity(0.12) : .clear)
+        )
+        .padding(.horizontal, Cairn.Space.md)
     }
 }
 
@@ -1461,56 +1857,34 @@ private struct UpdateAvailableRow: View {
     }
 }
 
-private struct UpdateCheckControl: View {
+/// The update check as one row: the title never moves, the outcome sits on the
+/// right. A label that rewrites itself between "check", "checking", and "try
+/// again" makes the row jump under the pointer that is about to press it.
+private struct UpdateCheckRow: View {
     let status: UpdateCheckStatus
     let onCheck: () -> Void
 
-    private var help: String {
-        switch status {
-        case .idle:
-            L10n.string("update.check")
-        case .checking:
-            L10n.string("update.checking")
-        case .upToDate:
-            L10n.string("update.check_again")
-        case .failed:
-            L10n.string("update.failed")
-        }
-    }
-
-    private var color: Color {
-        switch status {
-        case .idle:
-            Cairn.Brand.jade
-        case .checking, .upToDate:
-            Cairn.Ink.tertiary
-        case .failed:
-            Cairn.Status.degraded
-        }
-    }
-
     var body: some View {
-        Button(action: onCheck) {
+        MenuActionRow(
+            title: L10n.string("update.check"),
+            isEnabled: status != .checking,
+            action: onCheck
+        ) {
             switch status {
             case .idle:
-                Text(L10n.string("update.check"))
+                EmptyView()
             case .checking:
-                HStack(spacing: Cairn.Space.xs) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text(L10n.string("update.checking"))
-                }
+                ProgressView().controlSize(.small)
             case .upToDate:
-                Label(L10n.string("update.up_to_date"), systemImage: "checkmark.circle")
+                Text(L10n.string("update.up_to_date"))
+                    .font(Cairn.Typo.meta)
+                    .foregroundStyle(Cairn.Ink.tertiary)
             case .failed:
-                Label(L10n.string("update.try_again"), systemImage: "arrow.clockwise")
+                Text(L10n.string("update.failed"))
+                    .font(Cairn.Typo.meta)
+                    .foregroundStyle(Cairn.Status.degraded)
             }
         }
-        .buttonStyle(.plain)
-        .font(Cairn.Typo.meta)
-        .foregroundStyle(color)
-        .disabled(status == .checking)
-        .help(help)
     }
 }
 

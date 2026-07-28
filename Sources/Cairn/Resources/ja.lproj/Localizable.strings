@@ -15,6 +15,8 @@
 
 "note.dismiss" = "このノートを消す";
 "note.follow" = "クリックして実行元へ戻る";
+"note.clear_all" = "すべて消す";
+"note.clear_all.help" = "キュー内のノートをすべて消す";
 "menu.collapse_notes" = "ノートを閉じる";
 "menu.expand_notes" = "ノートを開く";
 "menu.clear" = "すべて消す";
@@ -22,7 +24,6 @@
 "menu.quit" = "Cairnを終了";
 
 "language.menu" = "言語";
-"language.follow_system" = "システムに従う";
 
 "update.available" = "アップデートがあります";
 "update.version_format" = "Cairn %@";
@@ -31,8 +32,6 @@
 "update.check" = "アップデートを確認…";
 "update.checking" = "確認中…";
 "update.up_to_date" = "最新バージョンです";
-"update.check_again" = "もう一度確認";
-"update.try_again" = "再試行";
 "update.failed" = "アップデートを確認できませんでした";
 
 "relative.now" = "今";
@@ -51,30 +50,80 @@
 "permission.application.not_installed" = "未インストール";
 "permission.application.not_needed" = "まだ不要";
 
-"access.window.welcome" = "Cairnへようこそ";
 "access.window.title" = "Cairnのアクセス";
-"access.welcome.ready" = "Cairnの準備ができました";
-"access.welcome.no_extra_access" = "追加アクセスなしで完了結果を表示できます。";
-"access.welcome.no_monitoring" = "画面収録やキーボード監視はしません";
-"access.welcome.precise_return" = "必要なときだけ正確な復帰を有効にできます";
-"access.welcome.later" = "あとで";
-"access.welcome.review" = "アクセスを確認";
 "access.title" = "正確な復帰";
-"access.subtitle" = "追加アクセスなしでもCairnは動作します。";
+"access.subtitle" = "許可がなくてもすべて動きます。許可すると、クリックがより正確な場所へ戻れます。";
 "access.refresh" = "更新";
 "access.editor.title" = "エディタウインドウ";
-"access.editor.detail" = "アクセシビリティを使って正しいウインドウを前面にします。";
+"access.editor.detail" = "そのターンが走っていた正確なウィンドウを前面に。未許可ではアプリを前面に出すだけです。";
 "access.terminal.title" = "Terminalのタブ";
 "access.terminal.short_detail" = "正確なタブへ戻ります。";
-"access.terminal.detail" = "オートメーションを使って正確なタブへ戻ります。";
+"access.terminal.detail" = "エージェントが走っていた正確な Terminal タブへ移動。未許可では Terminal を前面に出すだけです。";
 "access.iterm.title" = "iTerm2セッション";
 "access.iterm.short_detail" = "正確なセッションへ戻ります。";
-"access.iterm.detail" = "オートメーションを使って正確なセッションへ戻ります。";
+"access.iterm.detail" = "正確な iTerm2 セッションへ移動。未許可では iTerm2 を前面に出すだけです。";
 "access.browser.dynamic_title" = "%@のタブ";
 "access.browser.short_detail" = "一致するタブを再利用します。";
-"access.browser.detail" = "オートメーションを使って一致するタブを再利用します。";
+"access.browser.detail" = "セッションを開いているタブを選択し、毎回新しいタブを開きません。";
 "access.browser.title" = "ブラウザのタブ";
 "access.browser.unsupported" = "現在のブラウザには対応していません。";
-"access.privacy_summary" = "画面収録、入力監視、通知へのアクセスは不要です。";
 "access.open_settings" = "設定を開く";
 "access.settings" = "設定";
+
+"menu.connect" = "アプリ";
+"menu.connect_count" = "%d 件接続済み";
+
+"connect.window.title" = "エージェントを接続";
+"connect.title" = "コーディングエージェントを接続";
+"connect.subtitle" = "Cairn は各エージェントの設定にハンドラーを 1 つ加えるだけで、ほかは一切変更しません。";
+"connect.refresh" = "再確認";
+"connect.empty" = "この Mac では対応するエージェントがまだ見つかりません。";
+"connect.footer" = "「切断」は新しいノートを止めるだけです。すでにキューにあるノートは残り、そこへ戻れます。";
+
+"connect.state.connected" = "接続済み";
+"connect.state.available" = "接続できます";
+"connect.state.not_installed" = "未インストール";
+"connect.state.attention" = "確認が必要";
+"connect.state.working" = "処理中…";
+
+"connect.action.connect" = "接続";
+"connect.action.disconnect" = "切断";
+"connect.action.reconnect" = "再接続";
+"connect.action.repair" = "修復";
+
+
+"connect.issue.config_invalid" = "エージェントの設定ファイルを読み取れませんでした。";
+"connect.issue.script_missing" = "登録済みですが、参照先のスクリプトがありません。";
+"connect.issue.duplicate" = "重複して登録されているため、ノートが二重に届きます。";
+"connect.issue.other_source" = "別の場所の Cairn を読み込んでいるため、このアプリを更新しても反映されません。「再接続」でここに向け直せます。";
+"connect.issue.disabled" = "登録されていますが無効です。";
+"connect.issue.cli_missing" = "このエージェントのコマンドラインツールが見つかりません。";
+"connect.issue.foreign_plugin" = "Cairn 用のプラグイン位置がほかのもので使われています。";
+"connect.issue.broken_link" = "プラグインのリンクが切れています。";
+"connect.issue.partial" = "片方のエージェントにのみインストールされています。";
+"connect.issue.no_consent" = "会話へのアクセスがまだ許可されていません。";
+"connect.issue.plugin_missing" = "Cairn のプラグインファイルがありません。";
+
+"connect.followup.codex_trust" = "Codex で /hooks を一度実行し、Cairn のハンドラーを信頼してください。";
+"connect.followup.openclaw_restart" = "OpenClaw デスクトップが起動中だった場合は再起動してください。";
+"connect.followup.hermes_enable" = "次を実行してください: hermes plugins enable cairn";
+"connect.followup.hermes_restart" = "反映には Hermes の再起動が必要です。すでに動作中のゲートウェイやセッションは古い設定のままです。";
+
+"connect.consent.title" = "OpenClaw の最終応答を Cairn が読み取ることを許可しますか？";
+"connect.consent.body" = "OpenClaw はプラグインが会話を読む前に確認を求めます。Cairn が保持するのは直近のプロンプトと最終応答だけで、この Mac の中だけに残ります。";
+"connect.consent.allow" = "許可して接続";
+"connect.consent.cancel" = "キャンセル";
+
+"connect.failure.script_missing" = "Cairn 自身のインストーラーが見つかりません。アプリを再インストールしてください。";
+"connect.failure.timed_out" = "エージェントのコマンドラインツールが時間内に応答しませんでした。";
+"connect.failure.unreadable" = "インストーラーの応答を読み取れませんでした。";
+
+"connect.onboarding.requirement" = "エージェントを 1 つ以上接続すると開始できます。このウィンドウを閉じると Cairn は終了します。";
+"connect.onboarding.start" = "Cairn を使いはじめる";
+"control.intro.drag" = "石積みは画面のどこへでもドラッグできます。";
+"control.intro.notes" = "エージェントがタスクを終えると、ノートがこのすぐそばに現れます。";
+"control.intro.dismiss" = "わかりました";
+
+"access.onboarding.hint" = "あとからメニューの「アクセス」でいつでも変更できます。";
+"access.onboarding.skip" = "スキップ";
+"access.onboarding.done" = "完了";

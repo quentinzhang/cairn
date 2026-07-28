@@ -89,14 +89,15 @@ func buildVersionUsesTheRequestedLocale() {
 
 @Test
 @MainActor
-func languageSelectionPersistsAndCanReturnToTheSystem() throws {
+func languageSelectionPersists() throws {
     let suiteName = "app.cairn.tests.language.\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: suiteName))
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
+    // Nothing chosen yet: Cairn opens in whatever this Mac asked for.
     let settings = LanguageSettings(defaults: defaults)
-    #expect(settings.selection == .system)
-    #expect(L10n.preferredLocaleIdentifier(defaults: defaults) == nil)
+    #expect(settings.selection == AppLanguage.matchingSystem())
+    #expect(defaults.object(forKey: LanguageSettings.preferenceKey) == nil)
 
     settings.select(.japanese)
     #expect(settings.selection == .japanese)
@@ -105,22 +106,49 @@ func languageSelectionPersistsAndCanReturnToTheSystem() throws {
     #expect(L10n.preferredLocaleIdentifier(defaults: defaults) == "ja")
     #expect(L10n.string("language.menu", defaults: defaults) == "言語")
 
-    settings.select(.system)
-    #expect(settings.selection == .system)
-    #expect(defaults.object(forKey: LanguageSettings.preferenceKey) == nil)
-    #expect(L10n.preferredLocaleIdentifier(defaults: defaults) == nil)
+    settings.select(.english)
+    #expect(settings.selection == .english)
+    #expect(L10n.preferredLocaleIdentifier(defaults: defaults) == "en")
+}
+
+/// Choosing the language Cairn already inherited has to stick, or changing the
+/// Mac's language later would silently move the app too.
+@Test
+@MainActor
+func choosingTheInheritedLanguageStillPersistsIt() throws {
+    let suiteName = "app.cairn.tests.language.inherited.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let settings = LanguageSettings(defaults: defaults)
+    settings.select(settings.selection)
+    #expect(
+        defaults.string(forKey: LanguageSettings.preferenceKey)
+            == settings.selection.rawValue
+    )
 }
 
 @Test
 @MainActor
-func unsupportedSavedLanguageFallsBackToTheSystem() throws {
+func unsupportedSavedLanguageFallsBackToTheSystemMatch() throws {
     let suiteName = "app.cairn.tests.language.invalid.\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: suiteName))
     defer { defaults.removePersistentDomain(forName: suiteName) }
     defaults.set("ko", forKey: LanguageSettings.preferenceKey)
 
-    #expect(LanguageSettings(defaults: defaults).selection == .system)
-    #expect(L10n.preferredLocaleIdentifier(defaults: defaults) == nil)
+    #expect(LanguageSettings(defaults: defaults).selection == AppLanguage.matchingSystem())
+}
+
+/// The menu has no "follow the system" entry, so the first launch has to land
+/// on the right language by itself.
+@Test
+func theSystemLanguageResolvesToOneCairnSpeaks() {
+    #expect(AppLanguage.matchingSystem(preferences: ["zh-Hans-CN"]) == .simplifiedChinese)
+    #expect(AppLanguage.matchingSystem(preferences: ["ja-JP"]) == .japanese)
+    #expect(AppLanguage.matchingSystem(preferences: ["en-GB"]) == .english)
+    // A language Cairn does not speak still has to open in something.
+    #expect(AppLanguage.allCases.contains(AppLanguage.matchingSystem(preferences: ["ko-KR"])))
+    #expect(!AppLanguage.allCases.map(\.rawValue).contains("system"))
 }
 
 @Test

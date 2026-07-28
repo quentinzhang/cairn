@@ -1,4 +1,5 @@
 import AppKit
+import ScriptingBridge
 import ApplicationServices
 import Foundation
 import os
@@ -91,21 +92,50 @@ enum ConversationTrail {
 enum TrailFinder {
 
     static func follow(_ completion: CodexCompletion) {
+        // Asynchronous because the most precise steps may need a one-time
+        // Automation consent, and that dialog must not block the app.
+        Task { @MainActor in
+            await followTrail(completion)
+        }
+    }
+
+    private static func followTrail(_ completion: CodexCompletion) async {
         let locator = completion.locator
+        // At most one consent dialog per click, spent on the most precise
+        // step this note can use. Declining costs nothing: the trail simply
+        // continues to the fuzzier fallbacks below, exactly as if the
+        // permission were missing.
+        var consentBudget = true
 
         if let tty = shortTTY(locator?.tty),
            locator?.termProgram == "Apple_Terminal",
+           isRunning(bundleID: "com.apple.Terminal"),
+           await ensureAutomationConsent(
+               bundleID: "com.apple.Terminal",
+               displayName: "Terminal",
+               mayPrompt: &consentBudget
+           ),
            selectTerminalTab(tty: tty) {
             return
         }
 
         if let session = itermUUID(locator?.itermSessionID),
+           isRunning(bundleID: "com.googlecode.iterm2"),
+           await ensureAutomationConsent(
+               bundleID: "com.googlecode.iterm2",
+               displayName: "iTerm2",
+               mayPrompt: &consentBudget
+           ),
            selectITermSession(uuid: session) {
             return
         }
 
         if let hermesSessionURL = ConversationTrail.hermesDashboardSessionURL(for: completion) {
-            openWebURLReusingTab(hermesSessionURL)
+            await reuseOrOpen(
+                hermesSessionURL,
+                preferredBrowserBundleID: nil,
+                mayPrompt: &consentBudget
+            )
             return
         }
 
@@ -140,9 +170,10 @@ enum TrailFinder {
 
         // A browser-surfaced turn: return to its web UI.
         if let web = locator?.webURL, let url = URL(string: web) {
-            openWebURLReusingTab(
+            await reuseOrOpen(
                 url,
-                preferredBrowserBundleID: locator?.browserBundleID
+                preferredBrowserBundleID: locator?.browserBundleID,
+                mayPrompt: &consentBudget
             )
             return
         }
@@ -154,7 +185,7 @@ enum TrailFinder {
             return
         }
 
-        if followSourceFallback(completion) {
+        if await followSourceFallback(completion, mayPrompt: &consentBudget) {
             return
         }
 
@@ -167,7 +198,10 @@ enum TrailFinder {
     /// Hermes gateway is parented by launchd, OpenClaw's webchat lives in a
     /// browser tab, and older notes predate the locator entirely. When the
     /// captured trail leads nowhere, fall back to what the *source* implies.
-    private static func followSourceFallback(_ completion: CodexCompletion) -> Bool {
+    private static func followSourceFallback(
+        _ completion: CodexCompletion,
+        mayPrompt: inout Bool
+    ) async -> Bool {
         let source = completion.source?.lowercased() ?? ""
         switch source {
         case "hermes":
@@ -175,7 +209,7 @@ enum TrailFinder {
         case "openclaw":
             // The gateway's web UI is where webchat conversations live.
             if let url = URL(string: "http://127.0.0.1:\(openClawGatewayPort())") {
-                openWebURLReusingTab(url)
+                await reuseOrOpen(url, preferredBrowserBundleID: nil, mayPrompt: &mayPrompt)
                 return true
             }
             return false
@@ -217,10 +251,8 @@ enum TrailFinder {
     }
 
     private static func selectTerminalTab(tty: String) -> Bool {
-        guard NSRunningApplication.runningApplications(
-            withBundleIdentifier: "com.apple.Terminal"
-        ).first != nil,
-        PermissionExperience.shared.canAutomate(bundleID: "com.apple.Terminal") else {
+        guard isRunning(bundleID: "com.apple.Terminal"),
+              automationGranted(bundleID: "com.apple.Terminal") else {
             return false
         }
 
@@ -252,10 +284,8 @@ enum TrailFinder {
     }
 
     private static func selectITermSession(uuid: String) -> Bool {
-        guard NSRunningApplication.runningApplications(
-            withBundleIdentifier: "com.googlecode.iterm2"
-        ).first != nil,
-        PermissionExperience.shared.canAutomate(bundleID: "com.googlecode.iterm2") else {
+        guard isRunning(bundleID: "com.googlecode.iterm2"),
+              automationGranted(bundleID: "com.googlecode.iterm2") else {
             return false
         }
 
@@ -397,10 +427,11 @@ enum TrailFinder {
     /// it, and only open a new tab when none exists. Both loopback spellings
     /// (127.0.0.1 / localhost) are matched, since the user may have typed
     /// either.
-    private static func openWebURLReusingTab(
+    private static func reuseOrOpen(
         _ url: URL,
-        preferredBrowserBundleID: String? = nil
-    ) {
+        preferredBrowserBundleID: String?,
+        mayPrompt: inout Bool
+    ) async {
         let origins = tabMatchOrigins(for: url)
         let exactURLs = tabMatchURLs(for: url)
         let rememberedBrowser = rememberedBrowserBundleID(for: origins)
@@ -418,10 +449,26 @@ enum TrailFinder {
             !strongPreferenceIDs.contains($0.bundleID)
         }
 
+        // Consent, at the one moment it makes sense. Tab inspection needs the
+        // Automation permission, and Cairn's access center is somewhere this
+        // user may never go — but they just clicked a note that leads into a
+        // browser, so "Cairn wants to control Chrome" is arriving as the
+        // answer to their own action. Ask for the first browser that has
+        // never been asked about, and only that one: a click must not fan out
+        // into a cascade of consent dialogs.
+        var usableBrowsers: [ScriptableBrowser] = []
+        for browser in preferredBrowsers + fallbackBrowsers {
+            if await ensureAutomationConsent(for: browser, mayPrompt: &mayPrompt) {
+                usableBrowsers.append(browser)
+            }
+        }
+        let usablePreferred = usableBrowsers.filter { strongPreferenceIDs.contains($0.bundleID) }
+        let usableFallback = usableBrowsers.filter { !strongPreferenceIDs.contains($0.bundleID) }
+
         // A producer hint or a previously successful match is strong evidence:
         // try both the exact session and another OpenClaw tab in that browser
         // before inspecting any others.
-        for browser in preferredBrowsers {
+        for browser in usablePreferred {
             if focusExistingTab(in: browser, matchingExactURLs: exactURLs) {
                 remember(browser: browser, for: origins)
                 return
@@ -439,13 +486,13 @@ enum TrailFinder {
         // With no remembered browser (or after it stops containing OpenClaw),
         // search all remaining running browsers for an exact session before
         // repurposing a same-origin tab.
-        for browser in fallbackBrowsers {
+        for browser in usableFallback {
             if focusExistingTab(in: browser, matchingExactURLs: exactURLs) {
                 remember(browser: browser, for: origins)
                 return
             }
         }
-        for browser in fallbackBrowsers {
+        for browser in usableFallback {
             if focusExistingTab(
                 in: browser,
                 matchingOrigins: origins,
@@ -462,6 +509,54 @@ enum TrailFinder {
             remember(browser: browser, for: origins)
         }
         NSWorkspace.shared.open(url)
+    }
+
+    private static func ensureAutomationConsent(
+        for browser: ScriptableBrowser,
+        mayPrompt: inout Bool
+    ) async -> Bool {
+        await ensureAutomationConsent(
+            bundleID: browser.bundleID,
+            displayName: browser.scriptName,
+            mayPrompt: &mayPrompt
+        )
+    }
+
+    /// True when the app at `bundleID` may be scripted, asking the system once
+    /// if this is the first time anyone wanted to. A recorded denial is final
+    /// here — macOS will not re-ask, and the access center is the way back.
+    private static func ensureAutomationConsent(
+        bundleID: String,
+        displayName: String,
+        mayPrompt: inout Bool
+    ) async -> Bool {
+        if PermissionExperience.shared.canAutomate(bundleID: bundleID) {
+            return true
+        }
+        let state = await Task.detached {
+            AutomationPermissionProbe.state(bundleID: bundleID)
+        }.value
+        switch state {
+        case .granted:
+            return true
+        case .notRequested:
+            guard mayPrompt else { return false }
+            mayPrompt = false
+            let result = await Task.detached {
+                AutomationPermissionProbe.requestConsent(
+                    bundleID: bundleID,
+                    applicationName: displayName
+                )
+            }.value
+            PermissionExperience.shared.refresh()
+            return result == .granted
+        case .checking, .needsSettings, .unavailable:
+            return false
+        }
+    }
+
+    private static func isRunning(bundleID: String) -> Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
     }
 
     struct ScriptableBrowser {
@@ -586,14 +681,9 @@ enum TrailFinder {
         matchingExactURLs exactURLs: [String]
     ) -> Bool {
         guard !exactURLs.isEmpty else { return false }
-        let condition = exactURLs
-            .map { "u is \"\($0)\"" }
-            .joined(separator: " or ")
-        return runBrowserTabScript(
-            in: browser,
-            condition: condition,
-            navigatingTo: nil
-        )
+        return focusTab(in: browser, navigatingTo: nil) { url in
+            exactURLs.contains(url)
+        }
     }
 
     private static func focusExistingTab(
@@ -602,89 +692,126 @@ enum TrailFinder {
         navigatingTo targetURL: String
     ) -> Bool {
         guard !origins.isEmpty else { return false }
-
         // Match a complete origin boundary. A raw "starts with origin" check
         // also accepts a different port such as :187890.
-        let condition = origins
-            .map { "(u is \"\($0)\") or (u starts with \"\($0)/\")" }
-            .joined(separator: " or ")
-        return runBrowserTabScript(
-            in: browser,
-            condition: condition,
-            navigatingTo: targetURL
-        )
+        return focusTab(in: browser, navigatingTo: targetURL) { url in
+            origins.contains { url == $0 || url.hasPrefix($0 + "/") }
+        }
     }
 
-    private static func runBrowserTabScript(
-        in browser: ScriptableBrowser,
-        condition: String,
-        navigatingTo targetURL: String?
-    ) -> Bool {
+    /// The GUI instances of a browser, most likely to be "the user's
+    /// browser" first.
+    ///
+    /// `tell application "Google Chrome"` addresses a bundle id, and a
+    /// developer's Mac routinely runs two processes under that id: the real
+    /// browser and a headless one driven by Playwright or Puppeteer — the
+    /// same binary, launched for tests. Apple Events routed by bundle id can
+    /// land on the headless twin, which reports an empty window list and
+    /// makes every tab search come back "missing". So instances are
+    /// enumerated and addressed by pid, GUI-policy processes that own
+    /// windows on screen first.
+    private static func browserInstances(
+        of browser: ScriptableBrowser
+    ) -> [NSRunningApplication] {
+        let onScreen = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly],
+            kCGNullWindowID
+        ) as? [[String: Any]] ?? []
+        var windowsByPID: [pid_t: Int] = [:]
+        for window in onScreen {
+            guard let pid = window[kCGWindowOwnerPID as String] as? pid_t else { continue }
+            windowsByPID[pid, default: 0] += 1
+        }
 
-        // The access center refreshes permission state asynchronously. A note
-        // can be clicked while that cached state is still `checking`, so probe
-        // TCC again at the moment of use before deciding that tab inspection
-        // is unavailable. The probe never asks or displays a system prompt.
-        let cachedPermission = PermissionExperience.shared.canAutomate(
-            bundleID: browser.bundleID
-        )
-        let currentPermission = cachedPermission
-            ? CairnPermissionState.granted
-            : AutomationPermissionProbe.state(bundleID: browser.bundleID)
-        guard currentPermission == .granted else {
+        return NSWorkspace.shared.runningApplications
+            .filter {
+                $0.bundleIdentifier?.lowercased() == browser.bundleID
+                    && $0.activationPolicy == .regular
+            }
+            .sorted { first, second in
+                let firstWindows = windowsByPID[first.processIdentifier] ?? 0
+                let secondWindows = windowsByPID[second.processIdentifier] ?? 0
+                if firstWindows != secondWindows { return firstWindows > secondWindows }
+                let firstLaunch = first.launchDate ?? .distantFuture
+                let secondLaunch = second.launchDate ?? .distantFuture
+                return firstLaunch < secondLaunch
+            }
+    }
+
+    /// The access center refreshes permission state asynchronously, so the
+    /// cached state can lag a grant made moments ago. Fall back to a live TCC
+    /// probe — it never asks and never shows a prompt.
+    private static func automationGranted(bundleID: String) -> Bool {
+        PermissionExperience.shared.canAutomate(bundleID: bundleID)
+            || AutomationPermissionProbe.state(bundleID: bundleID) == .granted
+    }
+
+    private static func focusTab(
+        in browser: ScriptableBrowser,
+        navigatingTo targetURL: String?,
+        matching: (String) -> Bool
+    ) -> Bool {
+        guard automationGranted(bundleID: browser.bundleID) else {
             Logger.trail.notice(
                 """
                 Browser tab reuse skipped for \(browser.scriptName, privacy: .public): \
-                Automation is \(currentPermission.label, privacy: .public)
+                Automation is not granted
                 """
             )
             return false
         }
 
-        let navigation = targetURL.map { "set URL of t to \"\($0)\"" } ?? ""
-
-        let script: String
-        switch browser.dialect {
-        case .safari:
-            script = """
-            tell application "\(browser.scriptName)"
-                repeat with w in windows
-                    repeat with t in tabs of w
-                        set u to URL of t
-                        if u is not missing value and (\(condition)) then
-                            \(navigation)
-                            set current tab of w to t
-                            set index of w to 1
-                            activate
-                            return "found"
-                        end if
-                    end repeat
-                end repeat
-            end tell
-            return "missing"
-            """
-        case .chromium:
-            script = """
-            tell application "\(browser.scriptName)"
-                repeat with w in windows
-                    set tabIndex to 1
-                    repeat with t in tabs of w
-                        set u to URL of t
-                        if u is not missing value and (\(condition)) then
-                            \(navigation)
-                            set active tab index of w to tabIndex
-                            set index of w to 1
-                            activate
-                            return "found"
-                        end if
-                        set tabIndex to tabIndex + 1
-                    end repeat
-                end repeat
-            end tell
-            return "missing"
-            """
+        for instance in browserInstances(of: browser) {
+            if focusTab(
+                inInstanceWithPID: instance.processIdentifier,
+                of: browser,
+                navigatingTo: targetURL,
+                matching: matching
+            ) {
+                instance.activate()
+                return true
+            }
         }
-        return runAppleScript(script) == "found"
+        return false
+    }
+
+    /// Walk one instance's windows and tabs over the ScriptingBridge — the
+    /// same scripting interface AppleScript uses, but aimed at an exact pid.
+    /// Everything is read through KVC because Cairn ships no generated
+    /// headers for other people's apps; a browser that answers with nil
+    /// simply reads as having no matching tab.
+    private static func focusTab(
+        inInstanceWithPID pid: pid_t,
+        of browser: ScriptableBrowser,
+        navigatingTo targetURL: String?,
+        matching: (String) -> Bool
+    ) -> Bool {
+        guard let application = SBApplication(processIdentifier: pid),
+              let windows = (application as AnyObject).value(forKey: "windows") as? [AnyObject]
+        else {
+            return false
+        }
+
+        for window in windows {
+            guard let tabs = window.value(forKey: "tabs") as? [AnyObject] else { continue }
+            for (index, tab) in tabs.enumerated() {
+                guard let url = tab.value(forKey: "URL") as? String, matching(url) else {
+                    continue
+                }
+                if let targetURL {
+                    tab.setValue(targetURL, forKey: "URL")
+                }
+                switch browser.dialect {
+                case .safari:
+                    window.setValue(tab, forKey: "currentTab")
+                case .chromium:
+                    window.setValue(index + 1 as NSNumber, forKey: "activeTabIndex")
+                }
+                window.setValue(1 as NSNumber, forKey: "index")
+                return true
+            }
+        }
+        return false
     }
 
     // MARK: - Fallbacks and plumbing

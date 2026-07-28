@@ -15,14 +15,15 @@
 
 "note.dismiss" = "移除此便签";
 "note.follow" = "点击返回任务运行的位置";
+"note.clear_all" = "清除全部";
+"note.clear_all.help" = "移除队列中的所有便签";
 "menu.collapse_notes" = "收起便签";
 "menu.expand_notes" = "展开便签";
 "menu.clear" = "清空";
-"menu.access" = "访问权限";
+"menu.access" = "权限";
 "menu.quit" = "退出 Cairn";
 
 "language.menu" = "语言";
-"language.follow_system" = "跟随系统";
 
 "update.available" = "有新版本";
 "update.version_format" = "Cairn %@";
@@ -31,8 +32,6 @@
 "update.check" = "检查更新…";
 "update.checking" = "正在检查…";
 "update.up_to_date" = "已是最新版本";
-"update.check_again" = "再次检查";
-"update.try_again" = "重试";
 "update.failed" = "无法检查更新";
 
 "relative.now" = "刚刚";
@@ -51,30 +50,80 @@
 "permission.application.not_installed" = "未安装";
 "permission.application.not_needed" = "暂不需要";
 
-"access.window.welcome" = "欢迎使用 Cairn";
 "access.window.title" = "Cairn 访问权限";
-"access.welcome.ready" = "Cairn 已准备就绪";
-"access.welcome.no_extra_access" = "无需额外权限，也能显示智能体的完成结果。";
-"access.welcome.no_monitoring" = "不会录制屏幕或监控键盘";
-"access.welcome.precise_return" = "需要时再启用精确返回";
-"access.welcome.later" = "稍后";
-"access.welcome.review" = "查看访问权限";
 "access.title" = "精确返回";
-"access.subtitle" = "无需额外权限，Cairn 也能正常工作。";
+"access.subtitle" = "不授权也一切照常；授权后，点击便签能更精准地回到原处。";
 "access.refresh" = "刷新";
 "access.editor.title" = "编辑器窗口";
-"access.editor.detail" = "使用辅助功能唤起正确的窗口。";
+"access.editor.detail" = "唤起那一轮所在的确切窗口；未授权时只会把应用带到前台。";
 "access.terminal.title" = "Terminal 标签页";
 "access.terminal.short_detail" = "返回到准确的标签页。";
-"access.terminal.detail" = "使用自动化返回到准确的标签页。";
+"access.terminal.detail" = "精确定位到 agent 运行所在的那个 Terminal 标签页；未授权时只会唤起 Terminal。";
 "access.iterm.title" = "iTerm2 会话";
 "access.iterm.short_detail" = "返回到准确的会话。";
-"access.iterm.detail" = "使用自动化返回到准确的会话。";
+"access.iterm.detail" = "精确定位到 agent 运行所在的那个 iTerm2 会话；未授权时只会唤起 iTerm2。";
 "access.browser.dynamic_title" = "%@ 标签页";
 "access.browser.short_detail" = "重新使用匹配的标签页。";
-"access.browser.detail" = "使用自动化重新使用匹配的标签页。";
+"access.browser.detail" = "选中已打开该会话的标签页，而不是每次新开一个。";
 "access.browser.title" = "浏览器标签页";
 "access.browser.unsupported" = "当前浏览器暂不支持。";
-"access.privacy_summary" = "无需屏幕录制、输入监控或通知权限。";
 "access.open_settings" = "打开设置";
 "access.settings" = "设置";
+
+"menu.connect" = "应用";
+"menu.connect_count" = "已连接 %d 个";
+
+"connect.window.title" = "连接 Agent";
+"connect.title" = "连接你的编程 Agent";
+"connect.subtitle" = "Cairn 只在各 Agent 自己的配置里加一条处理器，其余内容原样保留。";
+"connect.refresh" = "重新检测";
+"connect.empty" = "这台 Mac 上还没有找到支持的 Agent。";
+"connect.footer" = "「断开」只停止接收新便签;已经在队列里的便签会保留,依然可以寻迹回去。";
+
+"connect.state.connected" = "已连接";
+"connect.state.available" = "可连接";
+"connect.state.not_installed" = "未安装";
+"connect.state.attention" = "需要处理";
+"connect.state.working" = "处理中…";
+
+"connect.action.connect" = "连接";
+"connect.action.disconnect" = "断开";
+"connect.action.reconnect" = "重新连接";
+"connect.action.repair" = "修复";
+
+
+"connect.issue.config_invalid" = "无法读取该 Agent 的配置文件。";
+"connect.issue.script_missing" = "已注册，但它指向的脚本已不存在。";
+"connect.issue.duplicate" = "重复注册了多次，会收到重复的便签。";
+"connect.issue.other_source" = "它加载的是别处的 Cairn 文件，更新本应用不会更新它。点「重新连接」改为指向当前应用。";
+"connect.issue.disabled" = "已注册但处于关闭状态。";
+"connect.issue.cli_missing" = "没有找到该 Agent 的命令行工具。";
+"connect.issue.foreign_plugin" = "Cairn 的插件位置已被其他内容占用。";
+"connect.issue.broken_link" = "插件链接指向了不存在的位置。";
+"connect.issue.partial" = "只为其中一个 Agent 安装了。";
+"connect.issue.no_consent" = "尚未授予对话读取权限。";
+"connect.issue.plugin_missing" = "缺少 Cairn 的插件文件。";
+
+"connect.followup.codex_trust" = "在 Codex 里运行一次 /hooks，并信任 Cairn 的处理器。";
+"connect.followup.openclaw_restart" = "若 OpenClaw 桌面端已在运行，请重启它。";
+"connect.followup.hermes_enable" = "请运行：hermes plugins enable cairn";
+"connect.followup.hermes_restart" = "需要重启 Hermes 才会生效;已在运行的 gateway 或会话会一直沿用旧设置。";
+
+"connect.consent.title" = "允许 Cairn 读取 OpenClaw 的最终回复吗？";
+"connect.consent.body" = "OpenClaw 要求插件读取对话前先征得同意。Cairn 只保留最后一条提示词和最终回复，且仅存放在这台 Mac 上。";
+"connect.consent.allow" = "允许并连接";
+"connect.consent.cancel" = "取消";
+
+"connect.failure.script_missing" = "Cairn 找不到自己的安装脚本，请重新安装应用。";
+"connect.failure.timed_out" = "该 Agent 的命令行工具没有在预期时间内响应。";
+"connect.failure.unreadable" = "Cairn 无法读取安装脚本的返回结果。";
+
+"connect.onboarding.requirement" = "至少连接一个 agent 后即可开始；直接关闭窗口将退出 Cairn。";
+"connect.onboarding.start" = "开始使用 Cairn";
+"control.intro.drag" = "石堆可以拖到屏幕上任何位置。";
+"control.intro.notes" = "Agent 完成任务后，便签就会出现在它旁边。";
+"control.intro.dismiss" = "知道了";
+
+"access.onboarding.hint" = "这些都可以以后在菜单「权限」里随时更改。";
+"access.onboarding.skip" = "跳过";
+"access.onboarding.done" = "完成";

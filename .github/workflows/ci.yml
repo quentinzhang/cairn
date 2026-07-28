@@ -52,6 +52,15 @@ jobs:
             cairn_claude_hook.py \
             cairn_locator.py \
             cairn_save.py \
+            cairn_payload.py \
+            cairn_connect.py \
+            cairn_doctor.py \
+            cairn_reset.py \
+            install_codex_hook.py \
+            install_claude_hook.py \
+            install_hermes_plugin.py \
+            install_openclaw_plugin.py \
+            install_agent_skills.py \
             AppIcon.icns \
             Cairn_Cairn.bundle \
             en.lproj/InfoPlist.strings \
@@ -77,6 +86,21 @@ jobs:
             plutil -lint "$strings"
           done
           echo "Bundle layout OK"
+
+      # The download-only path: the bundled installers must resolve their own
+      # payload from inside Contents/Resources, with no checkout in sight.
+      - name: Connect works from inside the bundle
+        run: |
+          set -euo pipefail
+          resources="dist/Cairn.app/Contents/Resources"
+          /usr/bin/python3 "$resources/cairn_connect.py" status --json > /tmp/connect.json
+          /usr/bin/python3 - <<'PY'
+          import json
+          report = json.load(open("/tmp/connect.json"))
+          ids = sorted(r["id"] for r in report["runtimes"])
+          assert ids == ["claude", "codex", "hermes", "openclaw", "skills"], ids
+          print("Bundled connect bridge OK:", ids)
+          PY
 
   python:
     name: Bridges (Python 3.9)

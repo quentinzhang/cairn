@@ -314,6 +314,7 @@ Six roles. Adding a seventh needs a reason.
 | `Typo.title` | `.headline` | menu bar header |
 | `Typo.noteTitle` | `.subheadline` semibold | the prompt that produced the note |
 | `Typo.noteBody` | 13pt | the agent's answer |
+| `Typo.menuRow` | 13pt | a menu row — the size macOS sets its own menus in |
 | `Typo.label` | `.caption` semibold | agent name — always in a tone label colour |
 | `Typo.meta` | `.caption` | workspace, status, secondary rows |
 | `Typo.micro` | `.caption2` | relative time |
@@ -347,6 +348,7 @@ part of the system, not call-site details:
 | `noteCardHeight` | 108 |
 | `noteCardSpacing` | 8 |
 | `noteRail` | 3 × 54 |
+| `noteClearAllHeight` | 26 |
 | `controlPanel` | 72 × 82 |
 | `controlBody` | 58 × 66 |
 | `badgeSize` | 19 |

@@ -92,9 +92,12 @@ menu bar, upgrade the precision of trail-back:
 - **Automation**, per application — return to an exact Apple Terminal tab, an
   exact iTerm2 session, or a specific browser tab.
 
-Without them, a click activates the app and, failing that, opens Finder. Cairn
-never raises a permission prompt from an ordinary note click, and every grant
-stays visible and revocable from the same Access panel.
+Without them, a click activates the app and, failing that, opens Finder. The
+one prompt a note click can raise is the Automation consent for the app the
+note leads back into — Terminal, iTerm2, or your browser — the first time and
+at most once per click. Declining just means the fuzzier fallback, and a
+recorded denial is never re-asked. Every grant stays visible and revocable
+from the same Access panel.
 
 ## Trust boundaries you should know about
 
@@ -117,18 +120,42 @@ stays visible and revocable from the same Access panel.
   is fine locally but means macOS treats each rebuild as a new application and
   discards its privacy grants.
 
-## Removing Cairn completely
+## Starting over
+
+To go back to a first-run state without uninstalling anything — every agent
+disconnected, the queue emptied, the preferences cleared, the app left in
+place:
 
 ```bash
-python3 Scripts/install_codex_hook.py uninstall
-python3 Scripts/install_claude_hook.py uninstall
-python3 Scripts/install_openclaw_plugin.py uninstall
-python3 Scripts/install_agent_skills.py uninstall
-hermes plugins disable cairn && rm -f ~/.hermes/plugins/cairn
+python3 Scripts/cairn_reset.py          # prints its plan, changes nothing
+python3 Scripts/cairn_reset.py --yes    # does it
+```
+
+`--keep-notes` spares the queue; `--keep-permissions` spares the Accessibility
+and Automation grants, which are otherwise revoked so macOS asks for them
+again. Everything it touches belongs to Cairn: its own handler in each agent's
+config, its own directory under Application Support, its own preference
+domain, and its own TCC rows.
+
+## Removing Cairn completely
+
+Disconnect every agent from Cairn's **Connect** window, or from a terminal —
+these work from a checkout and from inside an installed app alike:
+
+```bash
+for agent in codex claude openclaw hermes skills; do
+  python3 Scripts/cairn_connect.py disconnect "$agent"
+done
 rm -rf ~/Library/Application\ Support/Cairn
 rm -rf /Applications/Cairn.app
 ```
 
-Each uninstaller removes only Cairn's own handler and leaves every other hook
-and setting in your config files untouched. Revoke any Accessibility or
-Automation grants in System Settings → Privacy & Security.
+Inside an installed app the scripts live in
+`/Applications/Cairn.app/Contents/Resources/`, so uninstalling that way means
+removing the handlers *before* deleting the app.
+
+Disconnecting removes only Cairn's own handler and leaves every other hook and
+setting in your config files untouched. It also refuses to delete anything it
+did not create: a real directory in Cairn's plugin slot is reported, never
+replaced. Revoke any Accessibility or Automation grants in System Settings →
+Privacy & Security.

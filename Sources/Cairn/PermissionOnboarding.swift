@@ -239,11 +239,10 @@ struct AutomationAccess: Identifiable, Equatable {
     var id: String { bundleID }
 }
 
-/// Owns Cairn's permission state and the two small windows that expose it.
+/// Owns Cairn's permission state and the access-center window that exposes it.
 ///
-/// The welcome screen is versioned, but permission completion is never stored
-/// as a one-time boolean. Every status shown in the access center is refreshed
-/// from the operating system.
+/// Permission completion is never stored as a one-time boolean: every status
+/// shown in the access center is refreshed from the operating system.
 @MainActor
 final class PermissionExperience: ObservableObject {
     static let shared = PermissionExperience()
@@ -258,12 +257,10 @@ final class PermissionExperience: ObservableObject {
     @Published private(set) var browserAccess: AutomationAccess?
 
     private enum PreferenceKey {
-        static let journeyVersion = "cairn.permissions.journeyVersion"
         static let accessibilityRequested = "cairn.permissions.accessibilityRequested"
         static let legacyAXPromptShown = "cairn.trailfinder.axPromptShown"
     }
 
-    private static let currentJourneyVersion = 1
 
     private var terminalAccess: AutomationAccess {
         AutomationAccess(
@@ -286,9 +283,13 @@ final class PermissionExperience: ObservableObject {
         )
     }
 
-    private var welcomeWindow: NSWindow?
     private var centerWindow: NSWindow?
     private var workspaceObservers: [NSObjectProtocol] = []
+    /// True while the access center is the second onboarding step. It shows a
+    /// Skip / Done footer, and closing it — by either button or the close
+    /// button — hands the flow back to whoever presented it.
+    @Published private(set) var isOnboardingStep = false
+    private var onboardingStepCompletion: (() -> Void)?
     private var refreshGeneration = 0
     /// TCC can return `errAEEventNotPermitted` for a real request while its
     /// preflight still reports `errAEEventWouldRequireUserConsent`. Remember
@@ -332,38 +333,6 @@ final class PermissionExperience: ObservableObject {
         }
     }
 
-    func presentWelcomeIfNeeded() {
-        refresh()
-        guard UserDefaults.standard.integer(forKey: PreferenceKey.journeyVersion)
-                < Self.currentJourneyVersion else {
-            return
-        }
-
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 300),
-            styleMask: [.titled],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = L10n.string("access.window.welcome")
-        window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(
-            rootView: PermissionWelcomeView(
-                languageSettings: .shared,
-                onReview: { [weak self] in
-                    self?.finishWelcome()
-                    self?.presentCenter()
-                },
-                onLater: { [weak self] in self?.finishWelcome() }
-            )
-        )
-        window.center()
-        welcomeWindow = window
-
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
-    }
-
     func presentCenter() {
         refresh()
 
@@ -374,7 +343,7 @@ final class PermissionExperience: ObservableObject {
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 540),
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 516),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -390,8 +359,46 @@ final class PermissionExperience: ObservableObject {
         window.center()
         centerWindow = window
 
+        // Closing the window during the onboarding step means the same as
+        // Skip: the step is optional, and every grant stays available later
+        // from Access in the menu.
+        workspaceObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification,
+                object: window,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.concludeOnboardingStep() }
+            }
+        )
+
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+    }
+
+    /// Present the access center as the second step of first-run onboarding:
+    /// same window, plus a Skip / Done footer. `completion` runs exactly once,
+    /// whichever way the step ends.
+    func presentCenterAsOnboardingStep(completion: @escaping () -> Void) {
+        isOnboardingStep = true
+        onboardingStepCompletion = completion
+        presentCenter()
+    }
+
+    func finishOnboardingStep() {
+        guard isOnboardingStep else { return }
+        centerWindow?.close()
+        // The close notification concludes the step; closing an already
+        // closed window (button after X) falls through to conclude directly.
+        concludeOnboardingStep()
+    }
+
+    private func concludeOnboardingStep() {
+        guard isOnboardingStep else { return }
+        isOnboardingStep = false
+        let completion = onboardingStepCompletion
+        onboardingStepCompletion = nil
+        completion?()
     }
 
     func requestAccessibility() {
@@ -582,7 +589,6 @@ final class PermissionExperience: ObservableObject {
     }
 
     private func refreshLocalization() {
-        welcomeWindow?.title = L10n.string("access.window.welcome")
         centerWindow?.title = L10n.string("access.window.title")
         refresh()
     }
@@ -593,15 +599,6 @@ final class PermissionExperience: ObservableObject {
         if defaults.bool(forKey: PreferenceKey.legacyAXPromptShown) {
             defaults.set(true, forKey: PreferenceKey.accessibilityRequested)
         }
-    }
-
-    private func finishWelcome() {
-        UserDefaults.standard.set(
-            Self.currentJourneyVersion,
-            forKey: PreferenceKey.journeyVersion
-        )
-        welcomeWindow?.close()
-        welcomeWindow = nil
     }
 
     private func access(for kind: AutomationAccess.Kind) -> AutomationAccess? {
@@ -695,51 +692,6 @@ final class PermissionExperience: ObservableObject {
     }
 }
 
-private struct PermissionWelcomeView: View {
-    @ObservedObject var languageSettings: LanguageSettings
-    let onReview: () -> Void
-    let onLater: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Cairn.Space.xl) {
-            HStack(spacing: Cairn.Space.md) {
-                Image(nsImage: CairnMenuBarIcon.shared)
-                    .resizable()
-                    .frame(width: 26, height: 26)
-                Text(L10n.string("access.welcome.ready"))
-                    .font(.title2.weight(.semibold))
-            }
-
-            Text(L10n.string("access.welcome.no_extra_access"))
-                .foregroundStyle(.secondary)
-
-            Label(
-                L10n.string("access.welcome.no_monitoring"),
-                systemImage: "hand.raised"
-            )
-                .font(.subheadline)
-            Label(
-                L10n.string("access.welcome.precise_return"),
-                systemImage: "arrow.uturn.backward"
-            )
-                .font(.subheadline)
-
-            Spacer()
-
-            HStack {
-                Spacer()
-                Button(L10n.string("access.welcome.later"), action: onLater)
-                    .keyboardShortcut(.cancelAction)
-                Button(L10n.string("access.welcome.review"), action: onReview)
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding(Cairn.Space.xxl)
-        .frame(width: 420, height: 280)
-    }
-}
-
 private struct PermissionCenterView: View {
     @ObservedObject var experience: PermissionExperience
     @ObservedObject var languageSettings: LanguageSettings
@@ -803,26 +755,41 @@ private struct PermissionCenterView: View {
                         action: {}
                     )
                 }
-
-                Divider()
-
-                Label(
-                    L10n.string("access.privacy_summary"),
-                    systemImage: "lock.shield"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                HStack {
-                    Spacer()
-                    Text(CairnBuildInfo.displayVersion)
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(Cairn.Ink.tertiary)
-                }
             }
             .padding(Cairn.Space.xxl)
         }
-        .frame(width: 500, height: 520)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if experience.isOnboardingStep {
+                // The onboarding footer. Skip and Done lead to the same place
+                // — the step is optional and the rows above are the actual
+                // work — but both words have to exist: a person who granted
+                // nothing is skipping, and one who granted something is done.
+                VStack(spacing: 0) {
+                    Divider()
+                    HStack(spacing: Cairn.Space.md) {
+                        Text(L10n.string("access.onboarding.hint"))
+                            .font(.caption)
+                            .foregroundStyle(Cairn.Ink.tertiary)
+
+                        Spacer()
+
+                        Button(L10n.string("access.onboarding.skip")) {
+                            experience.finishOnboardingStep()
+                        }
+
+                        Button(L10n.string("access.onboarding.done")) {
+                            experience.finishOnboardingStep()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                    }
+                    .padding(.horizontal, Cairn.Space.xxl)
+                    .padding(.vertical, Cairn.Space.lg)
+                }
+                .background(.bar)
+            }
+        }
+        .frame(width: 500, height: 496)
     }
 
     private func automationRow(

@@ -2,28 +2,34 @@ import Combine
 import Foundation
 
 enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
-    case system
     case english = "en"
     case simplifiedChinese = "zh-Hans"
     case japanese = "ja"
 
     var id: String { rawValue }
 
-    var localeIdentifier: String? {
-        self == .system ? nil : rawValue
-    }
+    var localeIdentifier: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .system:
-            L10n.string("language.follow_system")
-        case .english:
-            "English"
-        case .simplifiedChinese:
-            "简体中文"
-        case .japanese:
-            "日本語"
+        case .english: "English"
+        case .simplifiedChinese: "简体中文"
+        case .japanese: "日本語"
         }
+    }
+
+    /// What Cairn opens in before anyone has chosen — the Mac's own preference,
+    /// resolved to one of the three languages Cairn actually speaks.
+    ///
+    /// There is no "follow the system" entry in the menu because there is
+    /// nothing for it to do: this *is* following the system, and the moment a
+    /// person picks a language they have said what they want instead.
+    static func matchingSystem(preferences: [String]? = nil) -> AppLanguage {
+        let best = Bundle.preferredLocalizations(
+            from: L10n.supportedLocales,
+            forPreferences: preferences
+        ).first
+        return best.flatMap(AppLanguage.init(rawValue:)) ?? .english
     }
 }
 
@@ -42,22 +48,20 @@ final class LanguageSettings: ObservableObject {
     }
 
     func select(_ language: AppLanguage) {
+        // Written even when it matches what is already on screen: until now the
+        // choice may only have been inherited from the system, and picking it
+        // deliberately is what makes it stick.
+        defaults.set(language.rawValue, forKey: Self.preferenceKey)
         guard selection != language else { return }
 
-        if language == .system {
-            defaults.removeObject(forKey: Self.preferenceKey)
-        } else {
-            defaults.set(language.rawValue, forKey: Self.preferenceKey)
-        }
         selection = language
         NotificationCenter.default.post(name: .cairnLanguageDidChange, object: language)
     }
 
     nonisolated static func savedLanguage(in defaults: UserDefaults) -> AppLanguage {
         guard let rawValue = defaults.string(forKey: preferenceKey),
-              let language = AppLanguage(rawValue: rawValue),
-              language != .system else {
-            return .system
+              let language = AppLanguage(rawValue: rawValue) else {
+            return .matchingSystem()
         }
         return language
     }
@@ -65,6 +69,31 @@ final class LanguageSettings: ObservableObject {
 
 extension Notification.Name {
     static let cairnLanguageDidChange = Notification.Name("app.cairn.languageDidChange")
+    /// The first agent is connected and the connect window has closed. The
+    /// desktop control answers this by introducing itself.
+    static let cairnOnboardingDidFinish = Notification.Name("app.cairn.onboardingDidFinish")
+    /// The app may show its surfaces without any introduction — an upgrade
+    /// arrived already connected, so there was no first run to finish.
+    static let cairnAppShouldStart = Notification.Name("app.cairn.appShouldStart")
+}
+
+/// Where every packaged resource is read from — strings, agent icons, anything
+/// else the package ships.
+///
+/// SwiftPM's generated `Bundle.module` accessor expects its resource bundle
+/// beside `Bundle.main`. A conventional macOS app keeps resources under
+/// `Contents/Resources`, so prefer that packaged location and fall back to
+/// SwiftPM's build/test location during development.
+enum CairnResources {
+    static var bundle: Bundle { packaged ?? .module }
+
+    private static var packaged: Bundle? {
+        guard let url = Bundle.main.resourceURL?
+            .appendingPathComponent("Cairn_Cairn.bundle") else {
+            return nil
+        }
+        return Bundle(url: url)
+    }
 }
 
 /// One localization boundary for both SwiftUI and AppKit-created windows.
@@ -91,10 +120,9 @@ enum L10n {
     }
 
     static func format(_ key: String, _ arguments: CVarArg...) -> String {
-        let localeIdentifier = preferredLocaleIdentifier()
-        return String(
+        String(
             format: string(key),
-            locale: localeIdentifier.map(Locale.init(identifier:)) ?? Locale.current,
+            locale: Locale(identifier: preferredLocaleIdentifier()),
             arguments: arguments
         )
     }
@@ -112,7 +140,7 @@ enum L10n {
     }
 
     private static func localizedBundle(localeIdentifier: String? = nil) -> Bundle {
-        let resources = packagedResourcesBundle ?? .module
+        let resources = CairnResources.bundle
         guard let localeIdentifier,
               let path = resources.path(
                 forResource: localeIdentifier.lowercased(),
@@ -126,19 +154,8 @@ enum L10n {
 
     static func preferredLocaleIdentifier(
         defaults: UserDefaults = .standard
-    ) -> String? {
+    ) -> String {
         LanguageSettings.savedLanguage(in: defaults).localeIdentifier
     }
 
-    /// SwiftPM's generated `Bundle.module` accessor expects its resource bundle
-    /// beside `Bundle.main`. A conventional macOS app keeps resources under
-    /// `Contents/Resources`, so prefer that packaged location and fall back to
-    /// SwiftPM's build/test location during development.
-    private static var packagedResourcesBundle: Bundle? {
-        guard let url = Bundle.main.resourceURL?
-            .appendingPathComponent("Cairn_Cairn.bundle") else {
-            return nil
-        }
-        return Bundle(url: url)
-    }
 }

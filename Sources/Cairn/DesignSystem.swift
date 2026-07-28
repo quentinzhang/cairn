@@ -315,6 +315,8 @@ extension Cairn {
         static let noteCardSpacing: CGFloat = 8
         static let noteRailWidth: CGFloat = 3
         static let noteRailHeight: CGFloat = 54
+        /// The pill that clears the whole queue, pinned under the stack.
+        static let noteClearAllHeight: CGFloat = 26
 
         static let controlPanel = CGSize(width: 72, height: 82)
         static let controlBody = CGSize(width: 58, height: 66)
@@ -351,6 +353,9 @@ extension Cairn {
         static let noteTitle = Font.subheadline.weight(.semibold)
         /// The agent's answer.
         static let noteBody = Font.system(size: 13)
+        /// A menu row. Matches what macOS sets its own menus in, because that
+        /// is what a person expects to be able to read at a glance.
+        static let menuRow = Font.system(size: 13)
         /// Agent name — always paired with a tone label colour.
         static let label = Font.caption.weight(.semibold)
         /// Workspace, status, secondary rows.

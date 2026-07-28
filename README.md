@@ -54,16 +54,27 @@ open dist/Cairn.app
 Requires macOS 14+; building needs Xcode 16+. There are no dependencies to
 fetch — only system frameworks and the Python 3 / Node.js standard libraries.
 
-Then connect whichever agents you use. Each installer merges exactly one handler
-into your existing config, preserves everything else, and can remove exactly
-that handler again with `uninstall`.
+Then connect whichever agents you use — from inside Cairn. On first launch it
+detects the agents on this Mac and offers to connect them; **Connect** in the
+menu opens the same window at any time. One click writes exactly one handler
+into that agent's own config, preserves everything else, and **Disconnect**
+removes exactly that handler again. Clicking Connect on a row that says *needs
+attention* also repairs it — a hook left behind by a checkout you moved or
+deleted is replaced, not duplicated.
+
+Nothing about it requires a checkout: a downloaded `.app` carries its own
+bridges and installers, and every hook it writes points inside the bundle.
+
+The same thing from a terminal, if you prefer one:
 
 ```bash
-python3 Scripts/install_codex_hook.py install       # Codex CLI and desktop app
-python3 Scripts/install_claude_hook.py install      # Claude Code
-python3 Scripts/install_openclaw_plugin.py install  # OpenClaw
-python3 Scripts/install_hermes_plugin.py            # Hermes
+python3 Scripts/cairn_connect.py status              # what is detected, what is wired
+python3 Scripts/cairn_connect.py connect claude      # codex · claude · openclaw · hermes · skills
+python3 Scripts/cairn_connect.py disconnect claude
 ```
+
+The per-agent installers (`Scripts/install_*.py`) still exist and still work;
+`cairn_connect.py` is what drives them.
 
 Notes per agent:
 
@@ -71,10 +82,10 @@ Notes per agent:
   will not execute an untrusted one.
 - **Claude Code** — interrupted turns and API failures do not fire `Stop`, so
   they produce no note.
-- **OpenClaw** — the installer asks before enabling conversation access and
-  before restarting the managed Gateway; answer both up front with
-  `--allow-conversation-access --restart-gateway`. Desktop or unmanaged setups
-  may need a manual restart.
+- **OpenClaw** — connecting asks once whether Cairn may read the final
+  conversation, then restarts the managed Gateway for you. Desktop or unmanaged
+  setups may need a manual restart. From the command line, answer up front with
+  `--allow-conversation-access`.
 - **Hermes** — covers Desktop, CLI, and Gateway turns that produce final
   assistant output.
 
@@ -130,7 +141,7 @@ echo "All 214 tests passed." | python3 Scripts/cairn_save.py --source ci --promp
 ## Saving a note on purpose
 
 ```bash
-python3 Scripts/install_agent_skills.py install
+python3 Scripts/cairn_connect.py connect skills
 ```
 
 Installs the `cairn-save` skill for Claude Code and Codex. Ask either agent to
@@ -144,7 +155,15 @@ Stop-hook capture.
 swift build && swift test                     # the app
 /usr/bin/python3 Tests/protocol_roundtrip.py  # every bridge, against the protocol
 ./Scripts/build_app.sh                        # package dist/Cairn.app
+python3 Scripts/cairn_reset.py                # what a first-run reset would remove
 ```
+
+Onboarding only happens once, which makes it the hardest part to test.
+`cairn_reset.py` walks it back — disconnects every agent, clears the queue and
+the preferences, and leaves the app in place — so the next launch is a first
+launch again — privacy grants included, so the permission prompts are part of
+the replay. It prints its plan and changes nothing until `--yes`;
+`--keep-permissions` spares the grants.
 
 The protocol tests and Swift tests lock opposite ends of
 [`docs/inbox-protocol.md`](docs/inbox-protocol.md); change one and expect the

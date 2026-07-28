@@ -56,16 +56,26 @@ open dist/Cairn.app
 macOS 14以降が必要です。ビルドにはXcode 16以降。取得すべき依存関係は
 ありません——システムフレームワークとPython 3 / Node.js標準ライブラリのみです。
 
-次に、使っているエージェントを接続します。各インストーラーは既存の設定に
-ハンドラーを1つだけマージし、他のすべてを保持します。`uninstall`で同じ
-ハンドラーだけを正確に取り除けます。
+次に、使っているエージェントをCairnの中から接続します。初回起動時にこのMac上の
+エージェントを検出して接続を提案し、メニューの**接続**からいつでも同じウィンドウを
+開けます。クリック1回で、そのエージェント自身の設定にハンドラーを1つだけ書き込み、
+他はすべて保持します。**切断**は同じハンドラーだけを取り除きます。*確認が必要*と
+表示された行の接続は修復も兼ねます——移動または削除したチェックアウトが残した
+古いhookは、重複ではなく置き換えられます。
+
+チェックアウトは一切不要です。ダウンロードした`.app`はブリッジとインストーラーを
+自分の中に持ち、書き込むhookはすべてバンドル内を指します。
+
+ターミナルが好みなら、同じことを:
 
 ```bash
-python3 Scripts/install_codex_hook.py install       # Codex CLI・デスクトップアプリ
-python3 Scripts/install_claude_hook.py install      # Claude Code
-python3 Scripts/install_openclaw_plugin.py install  # OpenClaw
-python3 Scripts/install_hermes_plugin.py            # Hermes
+python3 Scripts/cairn_connect.py status              # 何を検出し、何が繋がっているか
+python3 Scripts/cairn_connect.py connect claude      # codex · claude · openclaw · hermes · skills
+python3 Scripts/cairn_connect.py disconnect claude
 ```
+
+個別のインストーラー(`Scripts/install_*.py`)は今も存在し、今も動きます。
+`cairn_connect.py`はそれらを動かしている層です。
 
 エージェントごとの注意点:
 
@@ -73,10 +83,10 @@ python3 Scripts/install_hermes_plugin.py            # Hermes
   ください。信頼されていないhookはCodexが実行しません。
 - **Claude Code** — 中断されたターンやAPI失敗では `Stop` が発火しないため、
   ノートは生成されません。
-- **OpenClaw** — インストーラーは会話アクセスの有効化と管理対象Gatewayの
-  再起動の前に確認します。`--allow-conversation-access --restart-gateway` で
-  事前に両方に同意できます。Desktopや非管理の環境では手動再起動が必要な
-  場合があります。
+- **OpenClaw** — 接続時に、Cairnが最終的な会話を読んでよいかを一度だけ確認し、
+  その後は管理対象Gatewayを自動で再起動します。Desktopや非管理の環境では手動
+  再起動が必要な場合があります。コマンドラインでは
+  `--allow-conversation-access` で事前に同意できます。
 - **Hermes** — 最終的なアシスタント出力を生成するDesktop、CLI、Gatewayの
   ターンをカバーします。
 
@@ -133,7 +143,7 @@ echo "All 214 tests passed." | python3 Scripts/cairn_save.py --source ci --promp
 ## 意図的にノートを残す
 
 ```bash
-python3 Scripts/install_agent_skills.py install
+python3 Scripts/cairn_connect.py connect skills
 ```
 
 Claude CodeとCodexに `cairn-save` スキルをインストールします。どちらかの
@@ -147,7 +157,14 @@ Claude CodeとCodexに `cairn-save` スキルをインストールします。�
 swift build && swift test                     # アプリ本体
 /usr/bin/python3 Tests/protocol_roundtrip.py  # すべてのブリッジをプロトコルに照合
 ./Scripts/build_app.sh                        # dist/Cairn.app をパッケージ
+python3 Scripts/cairn_reset.py                # 初回状態に戻すと何が消えるかを表示
 ```
+
+初回起動の流れは一度しか起きないため、最もテストしづらい部分です。
+`cairn_reset.py` はそれを巻き戻します——全エージェントを切断し、キューと設定を
+消し、アプリ自体は残すので、次の起動がまた初回起動になります。既定では計画を
+表示するだけで何も変更せず、`--yes` で実行します。プライバシー許可も取り消される
+ため、許可ダイアログも再現の一部になります。`--keep-permissions` で許可を残せます。
 
 プロトコルテストとSwiftテストは
 [`docs/inbox-protocol.md`](docs/inbox-protocol.md)の両端を固定しています。

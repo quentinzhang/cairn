@@ -12,18 +12,29 @@ from __future__ import annotations
 import shutil
 import sys
 from pathlib import Path
+from typing import Iterable, Optional
 
-ROOT = Path(__file__).resolve().parent.parent
+from cairn_payload import payload_path
+
+SKILLS = payload_path("AgentSkills")
 SOURCES = {
     Path.home() / ".claude" / "skills" / "cairn-save" / "SKILL.md":
-        ROOT / "AgentSkills" / "claude" / "cairn-save" / "SKILL.md",
+        SKILLS / "claude" / "cairn-save" / "SKILL.md",
     Path.home() / ".codex" / "prompts" / "cairn-save.md":
-        ROOT / "AgentSkills" / "codex" / "cairn-save.md",
+        SKILLS / "codex" / "cairn-save.md",
+}
+# The runtime whose home directory has to exist for a target to be worth
+# writing. Cairn's Connect window installs only where the agent is present;
+# the command line stays unconditional.
+RUNTIME_HOME = {
+    Path.home() / ".claude" / "skills" / "cairn-save" / "SKILL.md": Path.home() / ".claude",
+    Path.home() / ".codex" / "prompts" / "cairn-save.md": Path.home() / ".codex",
 }
 
 
-def install() -> int:
-    for target, source in SOURCES.items():
+def install(targets: Optional[Iterable[Path]] = None) -> int:
+    for target in SOURCES if targets is None else targets:
+        source = SOURCES[target]
         if not source.is_file():
             print(f"Missing skill source: {source}", file=sys.stderr)
             return 1

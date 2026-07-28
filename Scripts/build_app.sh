@@ -10,14 +10,31 @@ entitlements="$root/Resources/Cairn.entitlements"
 resource_bundle="$root/.build/release/Cairn_Cairn.bundle"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$root/.build/release/cairn" "$app/Contents/MacOS/cairn"
-cp "$root/Scripts/cairn_codex_hook.py" "$app/Contents/Resources/cairn_codex_hook.py"
-cp "$root/Scripts/cairn_locator.py" "$app/Contents/Resources/cairn_locator.py"
-cp "$root/Scripts/cairn_save.py" "$app/Contents/Resources/cairn_save.py"
+# The bridges the agents run, and the installers that register them. Both sets
+# have to be here: an app downloaded as a .dmg has no checkout beside it, so
+# Connect drives these copies and every hook it writes points inside the
+# bundle — which is also what makes a moved or deleted checkout harmless.
+for script in \
+  cairn_codex_hook.py \
+  cairn_claude_hook.py \
+  cairn_locator.py \
+  cairn_save.py \
+  cairn_payload.py \
+  cairn_connect.py \
+  cairn_doctor.py \
+  cairn_reset.py \
+  install_codex_hook.py \
+  install_claude_hook.py \
+  install_hermes_plugin.py \
+  install_openclaw_plugin.py \
+  install_agent_skills.py
+do
+  cp "$root/Scripts/$script" "$app/Contents/Resources/$script"
+done
 /bin/rm -rf "$app/Contents/Resources/AgentSkills"
 cp -R "$root/AgentSkills" "$app/Contents/Resources/AgentSkills"
 /bin/rm -rf "$app/Contents/Resources/HermesPlugin" "$app/Contents/Resources/OpenClawPlugin"
 cp -R "$root/HermesPlugin" "$app/Contents/Resources/HermesPlugin"
-cp "$root/Scripts/cairn_claude_hook.py" "$app/Contents/Resources/cairn_claude_hook.py"
 cp -R "$root/OpenClawPlugin" "$app/Contents/Resources/OpenClawPlugin"
 cp "$root/Resources/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
 cp "$root/Resources/Info.plist" "$app/Contents/Info.plist"

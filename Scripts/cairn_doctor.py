@@ -32,8 +32,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from cairn_payload import payload_path
+
 HOME = Path.home()
+# The checkout root when run from a checkout; Contents/ when run from inside
+# an installed app. Only ever used to name the developer's tree — everything
+# that has to resolve in both layouts goes through SCRIPTS or payload_path.
 REPO = Path(__file__).resolve().parent.parent
+SCRIPTS = Path(__file__).resolve().parent
 SUPPORT = HOME / "Library" / "Application Support" / "Cairn"
 INBOX = SUPPORT / "inbox"
 STORE = SUPPORT / "completions.json"
@@ -207,7 +213,7 @@ def in_app_bundle(path: Path) -> bool:
 
 def check_hook_script(report: Report, runtime: str, scripts: list[Path], expected: str) -> None:
     """A hook is only real if the script it points at still exists."""
-    target = REPO / "Scripts" / expected
+    target = SCRIPTS / expected
     for script in scripts:
         if not script.exists():
             report.add(
@@ -217,7 +223,7 @@ def check_hook_script(report: Report, runtime: str, scripts: list[Path], expecte
                 "The hook is registered but the file is gone — every turn runs a\n"
                 "no-op. This is what happens after the repo is moved, renamed, or\n"
                 "the app it lived inside was deleted.",
-                f"python3 {tilde(REPO / 'Scripts' / ('install_' + runtime + '_hook.py'))} install",
+                f"python3 {tilde(SCRIPTS / ('install_' + runtime + '_hook.py'))} install",
             )
             continue
         if script.resolve() == target.resolve():
@@ -264,7 +270,7 @@ def check_environment(report: Report) -> None:
     else:
         report.add(OK, f"macOS {version}")
 
-    report.add(INFO, f"Repository: {tilde(REPO)}")
+    report.add(INFO, f"Running from: {tilde(SCRIPTS)}")
 
     if HOOK_INTERPRETER.exists():
         code, out = run([str(HOOK_INTERPRETER), "--version"])
@@ -279,7 +285,7 @@ def check_environment(report: Report) -> None:
         )
 
     for script in ("cairn_locator.py", "cairn_save.py"):
-        path = REPO / "Scripts" / script
+        path = SCRIPTS / script
         if not path.is_file():
             report.add(FAIL, f"Missing from this checkout: Scripts/{script}")
 
@@ -466,7 +472,7 @@ def check_codex(report: Report) -> None:
             WARN,
             "No Codex hooks configured",
             f"{tilde(CODEX_HOOKS)} does not exist.",
-            f"python3 {tilde(REPO / 'Scripts' / 'install_codex_hook.py')} install",
+            f"python3 {tilde(SCRIPTS / 'install_codex_hook.py')} install",
         )
         return
 
@@ -477,7 +483,7 @@ def check_codex(report: Report) -> None:
             WARN,
             "Cairn's Stop hook is not registered",
             f"{len(handlers)} other Stop handler(s) present and untouched.",
-            f"python3 {tilde(REPO / 'Scripts' / 'install_codex_hook.py')} install",
+            f"python3 {tilde(SCRIPTS / 'install_codex_hook.py')} install",
         )
         return
 
@@ -487,7 +493,7 @@ def check_codex(report: Report) -> None:
             WARN,
             f"{len(ours)} copies of Cairn's Stop hook",
             "Each one publishes the same turn, so you get duplicate notes.",
-            f"python3 {tilde(REPO / 'Scripts' / 'install_codex_hook.py')} uninstall  # then install once",
+            f"python3 {tilde(SCRIPTS / 'install_codex_hook.py')} uninstall  # then install once",
         )
     for handler in ours:
         check_hook_script(report, "codex", referenced_scripts(handler), "cairn_codex_hook.py")
@@ -521,7 +527,7 @@ def check_claude_code(report: Report) -> None:
             WARN,
             "No Claude Code settings file",
             f"{tilde(CLAUDE_SETTINGS)} does not exist.",
-            f"python3 {tilde(REPO / 'Scripts' / 'install_claude_hook.py')} install",
+            f"python3 {tilde(SCRIPTS / 'install_claude_hook.py')} install",
         )
         return
 
@@ -536,7 +542,7 @@ def check_claude_code(report: Report) -> None:
             WARN,
             "Cairn's Stop hook is not registered",
             f"{len(handlers)} other Stop handler(s) present and untouched.",
-            f"python3 {tilde(REPO / 'Scripts' / 'install_claude_hook.py')} install",
+            f"python3 {tilde(SCRIPTS / 'install_claude_hook.py')} install",
         )
         return
 
@@ -546,7 +552,7 @@ def check_claude_code(report: Report) -> None:
             WARN,
             f"{len(ours)} copies of Cairn's Stop hook",
             "Each one publishes the same turn, so you get duplicate notes.",
-            f"python3 {tilde(REPO / 'Scripts' / 'install_claude_hook.py')} uninstall  # then install once",
+            f"python3 {tilde(SCRIPTS / 'install_claude_hook.py')} uninstall  # then install once",
         )
     for handler in ours:
         check_hook_script(report, "claude", referenced_scripts(handler), "cairn_claude_hook.py")
@@ -559,13 +565,13 @@ def check_hermes(report: Report) -> None:
         report.add(INFO, "Hermes is not installed — skipped")
         return
 
-    source = REPO / "HermesPlugin"
+    source = payload_path("HermesPlugin")
     if not HERMES_PLUGIN.exists() and not HERMES_PLUGIN.is_symlink():
         report.add(
             WARN,
             "Cairn's Hermes plugin is not installed",
             f"{tilde(HERMES_PLUGIN)} does not exist.",
-            f"python3 {tilde(REPO / 'Scripts' / 'install_hermes_plugin.py')}",
+            f"python3 {tilde(SCRIPTS / 'install_hermes_plugin.py')}",
         )
         return
 
@@ -578,7 +584,7 @@ def check_hermes(report: Report) -> None:
                 "Hermes plugin is a broken symlink",
                 f"{tilde(HERMES_PLUGIN)} → {os.readlink(HERMES_PLUGIN)}\n"
                 "Hermes will fail to load it. This is what a moved checkout looks like.",
-                f"rm {tilde(HERMES_PLUGIN)} && python3 {tilde(REPO / 'Scripts' / 'install_hermes_plugin.py')}",
+                f"rm {tilde(HERMES_PLUGIN)} && python3 {tilde(SCRIPTS / 'install_hermes_plugin.py')}",
             )
             return
         if target == source.resolve():
@@ -634,7 +640,7 @@ def check_openclaw(report: Report) -> None:
             WARN,
             "No OpenClaw config",
             f"{tilde(OPENCLAW_CONFIG)} does not exist.",
-            f"python3 {tilde(REPO / 'Scripts' / 'install_openclaw_plugin.py')} install",
+            f"python3 {tilde(SCRIPTS / 'install_openclaw_plugin.py')} install",
         )
         return
 
@@ -647,7 +653,7 @@ def check_openclaw(report: Report) -> None:
             WARN,
             "Cairn's OpenClaw plugin is not configured",
             "No plugins.entries.cairn in the config.",
-            f"python3 {tilde(REPO / 'Scripts' / 'install_openclaw_plugin.py')} install",
+            f"python3 {tilde(SCRIPTS / 'install_openclaw_plugin.py')} install",
         )
         return
 
@@ -658,7 +664,7 @@ def check_openclaw(report: Report) -> None:
             FAIL,
             "The plugin is registered but disabled",
             "agent_end will not fire, so no OpenClaw turn is published.",
-            f"python3 {tilde(REPO / 'Scripts' / 'install_openclaw_plugin.py')} install",
+            f"python3 {tilde(SCRIPTS / 'install_openclaw_plugin.py')} install",
         )
 
     entry_hooks = entry.get("hooks")
@@ -672,10 +678,10 @@ def check_openclaw(report: Report) -> None:
             "Newer OpenClaw builds require this for the plugin to read the final\n"
             "assistant message; older builds have no such setting and are fine.\n"
             "Cairn keeps only the last user prompt and the final reply.",
-            f"python3 {tilde(REPO / 'Scripts' / 'install_openclaw_plugin.py')} install --allow-conversation-access",
+            f"python3 {tilde(SCRIPTS / 'install_openclaw_plugin.py')} install --allow-conversation-access",
         )
 
-    source = REPO / "OpenClawPlugin"
+    source = payload_path("OpenClawPlugin")
     installs = plugins.get("installs") if isinstance(plugins, dict) else None
     install = installs.get("cairn") if isinstance(installs, dict) else None
     linked = []
@@ -719,7 +725,7 @@ def check_openclaw(report: Report) -> None:
                 FAIL,
                 "OpenClaw's configured plugin path no longer exists",
                 f"{tilde(path)}\nOpenClaw cannot load it, so no turn is published.",
-                f"python3 {tilde(REPO / 'Scripts' / 'install_openclaw_plugin.py')} install",
+                f"python3 {tilde(SCRIPTS / 'install_openclaw_plugin.py')} install",
             )
 
 
@@ -745,7 +751,7 @@ def check_skills(report: Report) -> None:
             "The /cairn-save skill is optional",
             "The Stop hooks capture every turn automatically. This skill is the\n"
             "deliberate counterpart — an agent saving a conclusion on purpose.",
-            f"python3 {tilde(REPO / 'Scripts' / 'install_agent_skills.py')} install",
+            f"python3 {tilde(SCRIPTS / 'install_agent_skills.py')} install",
         )
 
 

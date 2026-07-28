@@ -13,9 +13,11 @@ import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
+from cairn_payload import payload_path
+
 
 PLUGIN_ID = "cairn"
-SOURCE = Path(__file__).resolve().parent.parent / "OpenClawPlugin"
+SOURCE = payload_path("OpenClawPlugin")
 CONFIG_FILE = Path(
     os.environ.get("OPENCLAW_CONFIG_PATH", Path.home() / ".openclaw" / "openclaw.json")
 ).expanduser()
@@ -196,6 +198,12 @@ def prefer_current_plugin_source(config: dict[str, Any]) -> bool:
             continue
         candidate = Path(value).expanduser()
         if candidate.resolve() == SOURCE.resolve():
+            continue
+        # A load path that no longer exists makes the entire config invalid,
+        # and OpenClaw then refuses every plugins command — including the one
+        # that would fix it. Dropping it is the repair, not a loss: there is
+        # nothing at the other end to lose.
+        if not candidate.exists():
             continue
         if plugin_id_at(candidate) == PLUGIN_ID:
             continue
