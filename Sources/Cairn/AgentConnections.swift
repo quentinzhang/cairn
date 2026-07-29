@@ -250,6 +250,7 @@ struct AgentRuntimeIdentity: Sendable {
         AgentRuntimeIdentity(id: "codex", name: "Codex", toneSource: "codex"),
         AgentRuntimeIdentity(id: "claude", name: "Claude Code", toneSource: "claude-code"),
         AgentRuntimeIdentity(id: "openclaw", name: "OpenClaw", toneSource: "openclaw"),
+        AgentRuntimeIdentity(id: "opencode", name: "OpenCode", toneSource: "opencode"),
         AgentRuntimeIdentity(id: "hermes", name: "Hermes", toneSource: "hermes"),
     ]
 
