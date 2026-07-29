@@ -25,7 +25,9 @@ Cairn leaves a small note where each one landed — click it to go back.
 
 ---
 
-## What it does
+## For users
+
+### What it does
 
 When your coding agent — say **Codex** or **Claude Code** — finishes a turn, a
 note settles beside a small stack of three river stones on your desktop.
@@ -40,11 +42,7 @@ note settles beside a small stack of three river stones on your desktop.
 - **Yours alone.** No account, no server, no telemetry. Everything stays on
   this Mac.
 
-Cairn does not integrate with agents — **it reads a directory**. Anything that
-can write a JSON file can leave a note, so a new runtime needs no change to the
-app. See [the inbox protocol](docs/inbox-protocol.md).
-
-## Install
+### Install
 
 1. Download the notarized `.dmg` from
    [Releases](https://github.com/quentinzhang/cairn/releases/latest) and drag
@@ -73,7 +71,7 @@ right after you connect:
 | **OpenCode** | Restart OpenCode if it was already running. |
 | **Hermes** | Restart Hermes if it was already running. |
 
-## Living with it
+### Everyday use
 
 - **The stones** sit on your desktop: click to expand or collapse the queue,
   drag them somewhere quieter. They remember where you put them.
@@ -83,22 +81,53 @@ right after you connect:
 - **Notes stay organised** — coloured by agent, and stacked into one pile per
   agent per project.
 
-## When a note does not arrive
+### Boundaries
 
-Bridges fail silently on purpose — a completion hook must never break the agent
-it runs inside — so one tool exists to explain the silence:
+- Cairn receives the final result only — not streaming progress, not tool logs.
+- The 50 most recent sessions are kept locally. No history beyond that, no sync
+  between machines.
+- macOS 14+ only.
+
+## Develop from source
+
+All commands below run from the repository checkout. They do not depend on
+scripts inside an installed copy of Cairn.
+
+### Build and run
 
 ```bash
-python3 /Applications/Cairn.app/Contents/Resources/cairn_doctor.py
+git clone https://github.com/quentinzhang/cairn.git && cd cairn
+swift build && swift test                     # compile and test the Swift target
+/usr/bin/python3 Tests/protocol_roundtrip.py  # test every bridge against the protocol
+./Scripts/build_app.sh                        # assemble and sign dist/Cairn.app
+open dist/Cairn.app                           # run the complete local App
+```
+
+Building needs Xcode 16+. There are no dependencies to fetch — only system
+frameworks and the Python 3 / Node.js standard libraries.
+
+`swift build` produces the Swift executable and SwiftPM resources under
+`.build/`; it does not assemble a macOS App. `Scripts/build_app.sh` performs
+the release build, copies every bridge and runtime plugin — including
+OpenCode — into `dist/Cairn.app`, adds the App resources and entitlements, and
+signs the finished bundle.
+
+### Diagnose missing notes
+
+Bridges fail silently on purpose — a completion hook must never break the agent
+it runs inside — so the source tree includes one tool to explain the silence:
+
+```bash
+python3 Scripts/cairn_doctor.py
 ```
 
 For every runtime you have installed it names the cause and the fix: a hook
 pointing at something that moved, a plugin linked but not enabled, a malformed
 payload in the inbox, a second copy of the app stealing notes. Add `--probe` to
 trace a test note end to end. The output is safe to paste into an issue — no
-note bodies, no prompts, no paths from outside the app.
+note bodies, no prompts, no paths from outside the checkout.
 
-## Privacy
+### Privacy and storage
 
 Each bridge keeps exactly two things from a finished turn — **the final
 assistant message and the most recent user prompt** — and discards the rest. No
@@ -118,27 +147,26 @@ time under **Access**; without them a click simply degrades to activating the
 app, then to Finder. The only network request checks GitHub Releases once a
 day. Full detail, including complete removal: [SECURITY.md](SECURITY.md).
 
-## Anything can leave a note
+### Extend the inbox protocol
 
-A CI pipeline, a long build, another agent runtime — write a producer against
-[`docs/inbox-protocol.md`](docs/inbox-protocol.md). The shortest version is one
-line:
+Cairn does not integrate with agents — **it reads a directory**. A CI pipeline,
+a long build, or another agent runtime can write a producer against
+[`docs/inbox-protocol.md`](docs/inbox-protocol.md). The shortest source-tree
+example is one line:
 
 ```bash
-echo "All 214 tests passed." | python3 /Applications/Cairn.app/Contents/Resources/cairn_save.py \
+echo "All 214 tests passed." | python3 Scripts/cairn_save.py \
   --source ci --prompt "nightly build"
 ```
 
-<details>
-<summary><b>From the terminal</b> — the same setup, and the <code>cairn-save</code> skill</summary>
+### Connection scripts and deliberate saves
 
-Everything the Connect window does is one script, bundled inside the app:
+Everything the Connect window does is available from the checkout:
 
 ```bash
-cd /Applications/Cairn.app/Contents/Resources
-python3 cairn_connect.py status              # what is detected, what is wired
-python3 cairn_connect.py connect claude      # codex · claude · openclaw · opencode · hermes · skills
-python3 cairn_connect.py disconnect claude
+python3 Scripts/cairn_connect.py status              # what is detected, what is wired
+python3 Scripts/cairn_connect.py connect claude      # codex · claude · openclaw · opencode · hermes · skills
+python3 Scripts/cairn_connect.py disconnect claude
 ```
 
 `connect skills` is the one target with no button, because it is a Cairn
@@ -150,26 +178,13 @@ saved from — distinct from the automatic capture when a turn ends.
 The per-agent installers (`install_*.py`) still exist and still work;
 `cairn_connect.py` is what drives them.
 
-</details>
-
-## Development
-
-```bash
-git clone https://github.com/quentinzhang/cairn.git && cd cairn
-swift build && swift test                     # the app
-/usr/bin/python3 Tests/protocol_roundtrip.py  # every bridge, against the protocol
-./Scripts/build_app.sh && open dist/Cairn.app # package and run
-python3 Scripts/cairn_reset.py                # what a first-run reset would remove
-```
-
-Building needs Xcode 16+. There are no dependencies to fetch — only system
-frameworks and the Python 3 / Node.js standard libraries.
+### Onboarding, design, and release
 
 Onboarding happens once, which makes it the hardest part to test.
-`cairn_reset.py` walks it back — disconnects every agent, clears the queue, the
-preferences, and the privacy grants, and leaves the app in place — so the next
-launch is a first launch again. It prints its plan and changes nothing until
-`--yes`; `--keep-permissions` spares the grants.
+`python3 Scripts/cairn_reset.py` walks it back — disconnects every agent,
+clears the queue, the preferences, and the privacy grants, and leaves the app
+in place — so the next launch is a first launch again. It prints its plan and
+changes nothing until `--yes`; `--keep-permissions` spares the grants.
 
 The protocol tests and the Swift tests lock opposite ends of
 [`docs/inbox-protocol.md`](docs/inbox-protocol.md); change one and expect the
@@ -187,13 +202,6 @@ CAIRN_NOTARY_PROFILE="cairn-notary" ./Scripts/release.sh --version 0.7.0
 ```
 
 See [the release guide](docs/releasing.md) for setup and recovery.
-
-## Boundaries
-
-- Cairn receives the final result only — not streaming progress, not tool logs.
-- The 50 most recent sessions are kept locally. No history beyond that, no sync
-  between machines.
-- macOS 14+ only. The inbox protocol is portable; this app is not.
 
 ## Contributing
 

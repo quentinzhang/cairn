@@ -25,7 +25,9 @@ Cairn は終わった場所に小さなノートを残します——開けば�
 
 ---
 
-## できること
+## 一般ユーザー向け
+
+### できること
 
 あなたのコーディングエージェント——たとえば **Codex** や **Claude Code**——が
 ターンを終えると、デスクトップの小さな石積み（3つの川石）のそばにノートがそっと
@@ -41,11 +43,7 @@ Cairn は終わった場所に小さなノートを残します——開けば�
 - **あなただけのもの。** アカウントなし、サーバーなし、テレメトリなし。すべては
   このMacの中にとどまります。
 
-Cairnはエージェントと統合しません——**ディレクトリを読むだけ**です。JSONファイルを
-書けるものなら何でもノートを残せるので、新しいランタイムへの対応にアプリの変更は
-不要です。[inboxプロトコル](docs/inbox-protocol.md)を参照してください。
-
-## インストール
+### インストール
 
 1. [Releases](https://github.com/quentinzhang/cairn/releases/latest) から公証済みの
    `.dmg` をダウンロードし、**Cairn** をアプリケーションフォルダへドラッグします。
@@ -74,7 +72,7 @@ macOS 14以降が必要です。
 | **OpenCode** | すでに起動していた場合はOpenCodeを再起動してください。 |
 | **Hermes** | すでに起動していた場合はHermesを再起動してください。 |
 
-## 日々の使いかた
+### 日々の使いかた
 
 - **石積み**はデスクトップに置かれます。クリックでキューを開閉し、ドラッグで
   静かな隅へ。置いた場所は覚えています。
@@ -84,23 +82,52 @@ macOS 14以降が必要です。
 - **ノートはひとりでに整う**——エージェントごとに色分けされ、エージェントと
   プロジェクトごとにひとつに積み重なります。
 
-## ノートが届かないとき
+### 利用上の境界
 
-ブリッジは意図的に静かに失敗します——完了hookは、それが動くエージェントを決して
-壊してはならないからです。だから、その沈黙を説明することだけを仕事にするツールが
-あります:
+- Cairnが受け取るのは最終結果のみで、ストリーミングの進捗やツールログは受け取りません。
+- ローカルに保持されるのは直近50セッションだけです。それより古い履歴はなく、
+  マシン間の同期もありません。
+- macOS 14以降のみ対応します。
+
+## ソースから開発する
+
+以下のコマンドはすべてリポジトリのルートから実行します。インストール済みCairn内の
+スクリプトには依存しません。
+
+### ビルドして実行する
 
 ```bash
-python3 /Applications/Cairn.app/Contents/Resources/cairn_doctor.py
+git clone https://github.com/quentinzhang/cairn.git && cd cairn
+swift build && swift test                     # Swift実行ターゲットをコンパイルしてテスト
+/usr/bin/python3 Tests/protocol_roundtrip.py  # すべてのブリッジをプロトコルに照合
+./Scripts/build_app.sh                        # dist/Cairn.appを組み立てて署名
+open dist/Cairn.app                           # 完全なローカルAppを起動
+```
+
+ビルドにはXcode 16以降が必要です。取得すべき依存関係はありません——システム
+フレームワークとPython 3 / Node.js標準ライブラリのみです。
+
+`swift build` が生成するのは `.build/` 内のSwift実行ファイルとSwiftPMリソースであり、
+macOS Appの組み立ては行いません。`Scripts/build_app.sh` はreleaseビルドを実行し、
+OpenCodeを含むすべてのブリッジとランタイムプラグインを `dist/Cairn.app` にコピーし、
+Appリソースとentitlementsを追加して完成したbundleに署名します。
+
+### ノートが届かないときの診断
+
+ブリッジは意図的に静かに失敗します——完了hookは、それが動くエージェントを決して
+壊してはならないからです。ソースツリーには、その沈黙を説明するツールがあります:
+
+```bash
+python3 Scripts/cairn_doctor.py
 ```
 
 実際にインストールされている各ランタイムについて、原因と直し方を指名します:
 移動した場所を指すhook、リンク済みだが無効なプラグイン、inboxに詰まった不正な
 ペイロード、ノートを奪う2つ目のアプリコピー。`--probe` を付ければテストノートを
 エンドツーエンドで追跡できます。出力はissueにそのまま貼って安全です——ノート本文
-なし、プロンプトなし、アプリ外のパスなし。
+なし、プロンプトなし、checkout外の絶対パスなし。
 
-## プライバシー
+### プライバシーと保存
 
 各ブリッジが完了したターンから残すのはちょうど2つ——**最後のアシスタントメッセージ
 と直近のユーザープロンプト**——で、残りはすべて破棄します。推論トレースなし、
@@ -120,27 +147,26 @@ python3 /Applications/Cairn.app/Contents/Resources/cairn_doctor.py
 格下げされるだけです。ネットワークリクエストは1日1回のGitHub Releases確認のみ。
 完全な削除方法を含む詳細は[SECURITY.md](SECURITY.md)を参照してください。
 
-## 何でもノートを残せます
+### inboxプロトコルを拡張する
 
-CIパイプライン、長いビルド、別のエージェントランタイム——
-[`docs/inbox-protocol.md`](docs/inbox-protocol.md)に対してプロデューサーを書いて
-ください。最短版は1行です:
+Cairnはエージェントと統合しません——**ディレクトリを読むだけ**です。CIパイプライン、
+長いビルド、別のエージェントランタイムは、
+[`docs/inbox-protocol.md`](docs/inbox-protocol.md)に対してプロデューサーを書けます。
+ソースツリーから使う最短版は1行です:
 
 ```bash
-echo "All 214 tests passed." | python3 /Applications/Cairn.app/Contents/Resources/cairn_save.py \
+echo "All 214 tests passed." | python3 Scripts/cairn_save.py \
   --source ci --prompt "nightly build"
 ```
 
-<details>
-<summary><b>ターミナルから</b> — 同じセットアップと <code>cairn-save</code> スキル</summary>
+### 接続スクリプトと意図的な保存
 
-接続ウィンドウが行うことはすべて1つのスクリプトで、アプリの中に同梱されています:
+接続ウィンドウが行うことは、checkoutから直接実行できます:
 
 ```bash
-cd /Applications/Cairn.app/Contents/Resources
-python3 cairn_connect.py status              # 何を検出し、何が繋がっているか
-python3 cairn_connect.py connect claude      # codex · claude · openclaw · opencode · hermes · skills
-python3 cairn_connect.py disconnect claude
+python3 Scripts/cairn_connect.py status              # 何を検出し、何が繋がっているか
+python3 Scripts/cairn_connect.py connect claude      # codex · claude · openclaw · opencode · hermes · skills
+python3 Scripts/cairn_connect.py disconnect claude
 ```
 
 `skills` はボタンのない唯一の対象です。接続すべきエージェントではなくCairnの機能
@@ -152,25 +178,12 @@ python3 cairn_connect.py disconnect claude
 個別のインストーラー（`install_*.py`）は今も存在し、今も動きます。
 `cairn_connect.py` はそれらを動かしている層です。
 
-</details>
-
-## 開発
-
-```bash
-git clone https://github.com/quentinzhang/cairn.git && cd cairn
-swift build && swift test                     # アプリ本体
-/usr/bin/python3 Tests/protocol_roundtrip.py  # すべてのブリッジをプロトコルに照合
-./Scripts/build_app.sh && open dist/Cairn.app # パッケージして起動
-python3 Scripts/cairn_reset.py                # 初回状態に戻すと何が消えるかを表示
-```
-
-ビルドにはXcode 16以降が必要です。取得すべき依存関係はありません——システム
-フレームワークとPython 3 / Node.js標準ライブラリのみです。
+### 初回起動、デザイン、リリース
 
 初回起動の流れは一度しか起きないため、最もテストしづらい部分です。
-`cairn_reset.py` はそれを巻き戻します——全エージェントを切断し、キュー・設定・
-プライバシー許可を消し、アプリ自体は残すので、次の起動がまた初回起動になります。
-既定では計画を表示するだけで何も変更せず、`--yes` で実行します。
+`python3 Scripts/cairn_reset.py` はそれを巻き戻します——全エージェントを切断し、
+キュー・設定・プライバシー許可を消し、アプリ自体は残すので、次の起動がまた
+初回起動になります。既定では計画を表示するだけで何も変更せず、`--yes` で実行します。
 `--keep-permissions` で許可を残せます。
 
 プロトコルテストとSwiftテストは[`docs/inbox-protocol.md`](docs/inbox-protocol.md)の
@@ -189,14 +202,6 @@ CAIRN_NOTARY_PROFILE="cairn-notary" ./Scripts/release.sh --version 0.7.0
 ```
 
 セットアップと復旧については[リリースガイド](docs/releasing.md)を参照してください。
-
-## 境界
-
-- Cairnが受け取るのは最終結果のみ——ストリーミングの進捗やツールログはありません。
-- ローカルに保持されるのは直近50セッション。それより古い履歴はなく、マシン間の
-  同期もありません。
-- macOS 14以降のみ。inboxプロトコルは移植可能ですが、このアプリは移植可能では
-  ありません。
 
 ## コントリビューション
 
