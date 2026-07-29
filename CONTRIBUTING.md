@@ -61,7 +61,7 @@ for `--version` and `--build`, rewrites the file and discards comments.
 - **Quiet.** No Dock icon, no system notifications, no focus stealing, no badge
   that demands attention. The floating control is non-activating by design.
   "Add a notification for X" is almost always a no.
-- **Local.** No network service, no account, no telemetry, no analytics. The
+- **Local.** No network service, no account, no analytics. The
   only outbound request in the entire app is a GitHub Releases check, run once
   a day or when the user explicitly asks. Automatic failures stay silent. A PR
   that adds a second destination needs a very good reason.
