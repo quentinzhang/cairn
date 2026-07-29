@@ -17,6 +17,9 @@
 "note.follow" = "点击返回任务运行的位置";
 "note.clear_all" = "清除全部";
 "note.clear_all.help" = "移除队列中的所有便签";
+"note.dismiss_stack" = "移除这一摞便签";
+"note.stack.expand" = "展开这里的全部 %d 条便签";
+"note.stack.collapse" = "重新叠起这些便签";
 "menu.collapse_notes" = "收起便签";
 "menu.expand_notes" = "展开便签";
 "menu.clear" = "清空";
@@ -24,6 +27,35 @@
 "menu.quit" = "退出 Cairn";
 
 "language.menu" = "语言";
+
+"menu.settings" = "设置…";
+"settings.window.title" = "Cairn 设置";
+"settings.section.preferences" = "偏好设置";
+"settings.section.setup" = "配置";
+"settings.done" = "完成";
+"settings.open" = "打开";
+"settings.launch_at_login" = "开机启动";
+"settings.launch_at_login.detail" = "登录时安静地启动 Cairn。";
+"settings.launch_at_login.approval" = "macOS 正等你在「登录项」里允许这一项。";
+"settings.launch_at_login.failed" = "macOS 拒绝了这次更改。请把 Cairn 移到「应用程序」后重试。";
+"settings.launch_at_login.open" = "打开登录项设置";
+"settings.language.detail" = "Cairn 自身界面文字使用的语言。";
+"settings.menu_bar_icon" = "菜单栏图标";
+"settings.menu_bar_icon.detail" = "在菜单栏保留 Cairn 的石堆图标。隐藏后，右键点击桌面上的石堆同样能回到这里。";
+"settings.control_size" = "桌面图标大小";
+"settings.control_size.detail" = "石堆在桌面上显示的大小。";
+"settings.control_size.small" = "较小";
+"settings.control_size.regular" = "标准";
+"settings.control_size.large" = "较大";
+"settings.stack_notes" = "便签堆叠";
+"settings.stack_notes.detail" = "把同一个智能体在同一个项目里的便签叠成一摞，就像通知中心那样。";
+"settings.shortcut" = "键盘快捷键";
+"settings.shortcut.detail" = "在任何应用里都能显示或隐藏便签。";
+"settings.shortcut.recording" = "请按键…";
+"settings.shortcut.hint" = "按住 ⌘、⌥ 或 ⌃ 再按一个键。Esc 保留原有组合，⌫ 恢复 ⌃⌥⌘C。";
+"settings.shortcut.unavailable" = "这组按键已被其他应用占用，请换一组。";
+"settings.apps.detail" = "连接那些完成任务后会留下便签的编程 Agent。";
+"settings.access.detail" = "授予权限，让点击能精确回到那个标签页、窗口或会话。";
 
 "update.available" = "有新版本";
 "update.version_format" = "Cairn %@";
@@ -52,7 +84,7 @@
 
 "access.window.title" = "Cairn 访问权限";
 "access.title" = "精确返回";
-"access.subtitle" = "不授权也一切照常；授权后，点击便签能更精准地回到原处。";
+"access.subtitle" = "不授权也可以工作；授权后，点击便签能更精准地回到原处。";
 "access.refresh" = "刷新";
 "access.editor.title" = "编辑器窗口";
 "access.editor.detail" = "唤起那一轮所在的确切窗口；未授权时只会把应用带到前台。";

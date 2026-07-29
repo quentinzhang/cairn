@@ -108,8 +108,9 @@ from the same Access panel.
   make Cairn run anything.
 - **Hooks run as you.** Installing a bridge means an agent runtime executes
   `/usr/bin/python3 <path>/cairn_*_hook.py` at the end of every turn, with your
-  full user privileges. That path is written into your runtime's config, so
-  moving or replacing the checkout changes what runs. `cairn_doctor.py` reports
+  full user privileges. That path is written into your runtime's config — inside
+  the app bundle for a downloaded Cairn, inside your checkout for a build of
+  your own — so moving or replacing it changes what runs. `cairn_doctor.py` reports
   the exact path each runtime is configured to execute — check it if you are
   unsure.
 - **Codex will not run an untrusted hook** and requires you to approve it through
@@ -127,8 +128,9 @@ disconnected, the queue emptied, the preferences cleared, the app left in
 place:
 
 ```bash
-python3 Scripts/cairn_reset.py          # prints its plan, changes nothing
-python3 Scripts/cairn_reset.py --yes    # does it
+cd /Applications/Cairn.app/Contents/Resources   # or Scripts/ in a checkout
+python3 cairn_reset.py          # prints its plan, changes nothing
+python3 cairn_reset.py --yes    # does it
 ```
 
 `--keep-notes` spares the queue; `--keep-permissions` spares the Accessibility
@@ -139,20 +141,20 @@ domain, and its own TCC rows.
 
 ## Removing Cairn completely
 
-Disconnect every agent from Cairn's **Connect** window, or from a terminal —
-these work from a checkout and from inside an installed app alike:
+Disconnect every agent from Cairn's Connect window — **Apps** in the menu — or
+from a terminal:
 
 ```bash
+cd /Applications/Cairn.app/Contents/Resources   # or Scripts/ in a checkout
 for agent in codex claude openclaw hermes skills; do
-  python3 Scripts/cairn_connect.py disconnect "$agent"
+  python3 cairn_connect.py disconnect "$agent"
 done
 rm -rf ~/Library/Application\ Support/Cairn
 rm -rf /Applications/Cairn.app
 ```
 
-Inside an installed app the scripts live in
-`/Applications/Cairn.app/Contents/Resources/`, so uninstalling that way means
-removing the handlers *before* deleting the app.
+The scripts are inside the app you are about to delete, so the order matters:
+remove the handlers *first*.
 
 Disconnecting removes only Cairn's own handler and leaves every other hook and
 setting in your config files untouched. It also refuses to delete anything it

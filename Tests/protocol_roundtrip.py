@@ -92,6 +92,15 @@ def published(inbox: Path, producer: str) -> list[dict[str, Any]]:
     return payloads
 
 
+def published_nothing(inbox: Path, producer: str) -> None:
+    """Assert that an intentionally ignored event left no inbox artifacts."""
+    if not inbox.exists():
+        check(True, f"{producer}: correctly left the inbox absent")
+        return
+    leftovers = list(inbox.iterdir())
+    check(not leftovers, f"{producer}: should publish nothing, found: {leftovers}")
+
+
 def sandbox() -> tuple[Path, Path, dict[str, str]]:
     home = Path(tempfile.mkdtemp(prefix="cairn-protocol-"))
     inbox = home / "Library" / "Application Support" / "Cairn" / "inbox"
@@ -296,12 +305,45 @@ def test_codex_hook() -> None:
         shutil.rmtree(home, ignore_errors=True)
 
 
-def test_codex_hook_survives_garbage() -> None:
+def test_codex_hook_ignores_missing_results() -> None:
     home, inbox, environment = sandbox()
     try:
         for stdin in ("", "{", json.dumps({"transcript_path": "/does/not/exist"})):
             run_producer("cairn_codex_hook.py", environment, stdin=stdin)
-        published(inbox, "cairn_codex_hook.py (degraded)")
+        published_nothing(inbox, "cairn_codex_hook.py (missing result)")
+    finally:
+        shutil.rmtree(home, ignore_errors=True)
+
+
+def test_codex_hook_ignores_internal_memory_turns() -> None:
+    home, inbox, environment = sandbox()
+    try:
+        transcript = home / "memory-agent.jsonl"
+        transcript.write_text(
+            json.dumps(
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": "memory consolidation finished"}],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        run_producer(
+            "cairn_codex_hook.py",
+            environment,
+            stdin=json.dumps(
+                {
+                    "session_id": "memory-agent",
+                    "transcript_path": str(transcript),
+                    "cwd": str(home / ".codex" / "memories"),
+                }
+            ),
+        )
+        published_nothing(inbox, "cairn_codex_hook.py (internal memory turn)")
     finally:
         shutil.rmtree(home, ignore_errors=True)
 
@@ -414,7 +456,8 @@ def main() -> int:
         test_claude_hook,
         test_claude_hook_survives_garbage,
         test_codex_hook,
-        test_codex_hook_survives_garbage,
+        test_codex_hook_ignores_missing_results,
+        test_codex_hook_ignores_internal_memory_turns,
         test_hermes_plugin,
     ):
         print(f"· {test.__name__}")

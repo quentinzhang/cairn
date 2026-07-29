@@ -510,6 +510,11 @@ final class AgentConnectionCenter: ObservableObject {
             defer: false
         )
         window.title = L10n.string("connect.window.title")
+        // Close and nothing else, the same as every other Cairn window: these
+        // are fixed sheets, so zoom has nothing to do, and a minimised window
+        // belonging to an app with no Dock icon is a window you cannot get back.
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(
             rootView: AgentConnectionsView(center: self, languageSettings: .shared)

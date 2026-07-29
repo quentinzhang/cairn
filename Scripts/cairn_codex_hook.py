@@ -4,6 +4,8 @@
 Codex invokes this script from a Stop hook and passes hook metadata as JSON on
 stdin. The only intentionally undocumented dependency is transcript parsing;
 the extractor accepts both response_item messages and event_msg fallbacks.
+Internal memory-writing turns and turns without an extractable final answer are
+ignored: a Stop event alone is not enough to create a user-facing note.
 """
 
 from __future__ import annotations
@@ -51,14 +53,14 @@ def output_text(content: Any) -> str:
     return "\n".join(pieces).strip()
 
 
-def latest_completion(transcript_path: str | None) -> tuple[str, str | None]:
+def latest_completion(transcript_path: str | None) -> tuple[str | None, str | None]:
     """Return the final assistant message and its turn id from a Codex JSONL transcript."""
     if not transcript_path:
-        return "Codex completed this turn.", None
+        return None, None
     try:
         lines = Path(transcript_path).read_text(encoding="utf-8").splitlines()
     except OSError:
-        return "Codex completed this turn.", None
+        return None, None
 
     turn_id: str | None = None
     fallback = ""
@@ -84,7 +86,19 @@ def latest_completion(transcript_path: str | None) -> tuple[str, str | None]:
             message = payload.get("message")
             if isinstance(message, str) and message.strip() and not fallback:
                 fallback = message.strip()
-    return fallback or "Codex completed this turn.", turn_id
+    return fallback or None, turn_id
+
+
+def is_internal_working_directory(cwd: str) -> bool:
+    """Identify Codex-owned workspaces that must not become user-facing notes."""
+    if not cwd:
+        return False
+    try:
+        working_directory = Path(cwd).expanduser().resolve(strict=False)
+        memories_directory = (Path.home() / ".codex" / "memories").resolve(strict=False)
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return working_directory == memories_directory or memories_directory in working_directory.parents
 
 
 def title_for(cwd: str) -> str:
@@ -94,12 +108,17 @@ def title_for(cwd: str) -> str:
 
 def main() -> int:
     hook = read_hook_input()
+    cwd = str(hook.get("cwd") or "")
+    if is_internal_working_directory(cwd):
+        return 0
+
     result, transcript_turn_id = latest_completion(hook.get("transcript_path"))
+    if not result:
+        return 0
     if len(result) > RESULT_LIMIT:
         result = result[:RESULT_LIMIT] + "\n\n… Result shortened by Cairn's MVP relay."
     session_id = str(hook.get("session_id") or "unknown-session")
     turn_id = str(hook.get("turn_id") or transcript_turn_id or datetime.now(timezone.utc).timestamp())
-    cwd = str(hook.get("cwd") or "")
     payload = {
         "id": f"{session_id}:{turn_id}",
         "version": 1,

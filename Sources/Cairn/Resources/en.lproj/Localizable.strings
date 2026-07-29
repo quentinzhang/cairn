@@ -17,6 +17,9 @@
 "note.follow" = "Click to go back to where this ran";
 "note.clear_all" = "Clear all";
 "note.clear_all.help" = "Dismiss every note in the queue";
+"note.dismiss_stack" = "Dismiss every note in this stack";
+"note.stack.expand" = "Show all %d notes from here";
+"note.stack.collapse" = "Stack these notes again";
 "menu.collapse_notes" = "Collapse notes";
 "menu.expand_notes" = "Expand notes";
 "menu.clear" = "Clear";
@@ -24,6 +27,35 @@
 "menu.quit" = "Quit Cairn";
 
 "language.menu" = "Language";
+
+"menu.settings" = "Settings…";
+"settings.window.title" = "Cairn Settings";
+"settings.section.preferences" = "Preferences";
+"settings.section.setup" = "Setup";
+"settings.done" = "Done";
+"settings.open" = "Open";
+"settings.launch_at_login" = "Open at login";
+"settings.launch_at_login.detail" = "Start Cairn quietly whenever you log in.";
+"settings.launch_at_login.approval" = "macOS is waiting for you to allow this in Login Items.";
+"settings.launch_at_login.failed" = "macOS would not change the login item. Move Cairn to Applications and try again.";
+"settings.launch_at_login.open" = "Open Login Items";
+"settings.language.detail" = "The language Cairn's own text is written in.";
+"settings.menu_bar_icon" = "Menu bar icon";
+"settings.menu_bar_icon.detail" = "Keep Cairn's stone in the menu bar. Hidden, everything here is still one right-click on the desktop control away.";
+"settings.control_size" = "Desktop control size";
+"settings.control_size.detail" = "How large the stones sit on your desktop.";
+"settings.control_size.small" = "Small";
+"settings.control_size.regular" = "Regular";
+"settings.control_size.large" = "Large";
+"settings.stack_notes" = "Stack notes";
+"settings.stack_notes.detail" = "Gather notes from the same agent working in the same project into one stack, the way Notification Center does.";
+"settings.shortcut" = "Keyboard shortcut";
+"settings.shortcut.detail" = "Show or hide the notes from anywhere, whichever app you are in.";
+"settings.shortcut.recording" = "Press keys…";
+"settings.shortcut.hint" = "Hold ⌘, ⌥ or ⌃ and press a key. Esc keeps the old one, ⌫ restores ⌃⌥⌘C.";
+"settings.shortcut.unavailable" = "Another app answers to this combination. Record a different one.";
+"settings.apps.detail" = "Connect the coding agents whose finished turns leave a note.";
+"settings.access.detail" = "Grant the access that makes a click land on the exact tab, window, or session.";
 
 "update.available" = "Update available";
 "update.version_format" = "Cairn %@";

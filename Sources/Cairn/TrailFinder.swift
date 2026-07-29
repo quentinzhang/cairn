@@ -67,17 +67,31 @@ enum ConversationTrail {
         return components.url
     }
 
+    /// Where a Mac keeps its applications, the user's own copy first.
+    ///
+    /// A source fallback knows an agent's app by the name on its icon, not by
+    /// a bundle id: Launch Services can only answer for ids it has already
+    /// registered, so the search widens to the folders apps actually live in.
+    static func applicationBundleCandidates(
+        named name: String,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> [URL] {
+        let bundleName = "\(name).app"
+        return [
+            home.appendingPathComponent("Applications"),
+            URL(fileURLWithPath: "/Applications"),
+            URL(fileURLWithPath: "/Applications/Utilities"),
+            URL(fileURLWithPath: "/System/Applications"),
+        ].map { $0.appendingPathComponent(bundleName) }
+    }
+
     /// Prefer a thread deep link only when the turn actually lived in Codex
     /// Desktop. CLI and editor turns should still return to their terminal or
     /// editor, even though Codex Desktop can also display the same session.
     static func wasHostedByCodexDesktop(_ locator: CairnLocator?) -> Bool {
         guard let locator else { return false }
-        var paths = (locator.hostApps ?? []).compactMap(\.path)
-        if let path = locator.hostAppPath, !paths.contains(path) {
-            paths.append(path)
-        }
 
-        return paths.contains { path in
+        return hostBundlePaths(locator).contains { path in
             let appURL = URL(fileURLWithPath: path)
             if Bundle(url: appURL)?.bundleIdentifier?.lowercased() == "com.openai.codex" {
                 return true
@@ -85,6 +99,148 @@ enum ConversationTrail {
             let appName = appURL.lastPathComponent.lowercased()
             return appName == "codex.app" || appName == "chatgpt.app"
         }
+    }
+
+    /// True when the turn ran inside the Claude desktop app.
+    ///
+    /// Claude Code's desktop harness is a background-only `claude.app` nested
+    /// under the desktop application, so the ancestry records two Claude
+    /// bundles for one turn and either layer settles the question. A turn run
+    /// from a terminal has neither: the standalone CLI is a bare executable
+    /// under `~/.local/share/claude`, not an app bundle.
+    ///
+    /// What hangs on the answer is `claude://resume?session=<uuid>`, which
+    /// *imports* a CLI session into the desktop app. For a turn that already
+    /// ran there the import is a second entry for one conversation, and the
+    /// user's sidebar fills with untitled twins of everything they clicked.
+    static func wasHostedByClaudeDesktop(_ locator: CairnLocator?) -> Bool {
+        guard let locator else { return false }
+
+        return hostBundlePaths(locator).contains { path in
+            let appURL = URL(fileURLWithPath: path)
+            let bundleID = Bundle(url: appURL)?.bundleIdentifier?.lowercased()
+            if bundleID == "com.anthropic.claudefordesktop" || bundleID == "com.anthropic.claude-code" {
+                return true
+            }
+            return appURL.lastPathComponent.lowercased() == "claude.app"
+        }
+    }
+
+    /// The conversation this Claude Code turn belongs to, addressed by the id
+    /// the desktop app files it under rather than the CLI's.
+    ///
+    /// `claude://resume?session=<cli-uuid>` is the obvious way in and the wrong
+    /// one: it *imports* the transcript, filing a second session under
+    /// `local_<cli-uuid>` beside the one the app already has, and rewriting the
+    /// CLI transcript on the way through. This route asks for the session the
+    /// app already holds, so nothing is created and nothing is rewritten.
+    ///
+    /// `/claude-code-desktop/<id>` is the app's older spelling of that route,
+    /// kept working by a redirect the app itself maintains — a steadier thing
+    /// to hard-code than the current internal name, which has already changed
+    /// once. It costs one window reload, which is the price of not leaving a
+    /// duplicate behind.
+    static func claudeDesktopConversationURL(
+        for completion: CodexCompletion,
+        in store: URL? = nil
+    ) -> URL? {
+        guard completion.source?.lowercased() == "claude-code",
+              UUID(uuidString: completion.sessionID) != nil,
+              let desktopID = ClaudeDesktopSessions.sessionID(
+                  forCLISession: completion.sessionID,
+                  in: store
+              ),
+              let encoded = desktopID.addingPercentEncoding(
+                  withAllowedCharacters: .urlPathAllowed
+              ) else {
+            return nil
+        }
+        return URL(string: "claude://claude.ai/claude-code-desktop/\(encoded)")
+    }
+
+    /// Every `.app` the turn ran under, innermost first.
+    private static func hostBundlePaths(_ locator: CairnLocator) -> [String] {
+        var paths = (locator.hostApps ?? []).compactMap(\.path)
+        if let path = locator.hostAppPath, !paths.contains(path) {
+            paths.append(path)
+        }
+        return paths
+    }
+}
+
+// MARK: - Claude Desktop's session store
+
+/// What the Claude desktop app knows about the sessions it runs.
+///
+/// Cairn reads it for exactly one fact: the id the app files a given CLI
+/// session under. A hook only ever learns the CLI session id, and every way
+/// into the app that takes one imports a second copy of the conversation.
+///
+/// Read-only, and never load-bearing: an unreadable store, a moved directory
+/// or a layout Cairn does not recognize all answer "no session", and the trail
+/// falls through to activating the app.
+enum ClaudeDesktopSessions {
+    static var defaultStore: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Claude/claude-code-sessions")
+    }
+
+    /// The desktop app's own id for a CLI session, or nil when it does not
+    /// hold that conversation.
+    ///
+    /// A Mac can carry two records for one conversation: the app's own, and a
+    /// twin an earlier Cairn imported beside it. Both resume the same
+    /// transcript, so nothing is lost either way — but the app's own is the
+    /// row that carries the title the user recognizes, so it wins, and the
+    /// twins quietly stop being anywhere Cairn sends them. An imported session
+    /// is recognizable by the id the import derives: `local_<cli-uuid>`.
+    /// Where that tells them apart, the liveliest record does.
+    static func sessionID(forCLISession cliSessionID: String, in store: URL? = nil) -> String? {
+        guard !cliSessionID.isEmpty else { return nil }
+        let importedID = "local_\(cliSessionID)"
+
+        var best: (id: String, ownedByTheApp: Bool, activity: Double)?
+        for record in records(in: store ?? defaultStore) {
+            guard let data = try? Data(contentsOf: record),
+                  let fields = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  fields["cliSessionId"] as? String == cliSessionID,
+                  let id = fields["sessionId"] as? String,
+                  !id.isEmpty else {
+                continue
+            }
+            let candidate = (
+                id: id,
+                ownedByTheApp: id != importedID,
+                activity: (fields["lastActivityAt"] as? Double) ?? 0
+            )
+            guard let winner = best else {
+                best = candidate
+                continue
+            }
+            if candidate.ownedByTheApp != winner.ownedByTheApp {
+                if candidate.ownedByTheApp { best = candidate }
+            } else if candidate.activity > winner.activity {
+                best = candidate
+            }
+        }
+        return best?.id
+    }
+
+    /// The store nests one directory per install and one per account inside
+    /// it, so a Mac that has signed into two accounts holds two of them.
+    private static func records(in store: URL) -> [URL] {
+        func children(_ url: URL) -> [URL] {
+            (try? FileManager.default.contentsOfDirectory(
+                at: url,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )) ?? []
+        }
+
+        return children(store)
+            .flatMap(children)
+            .flatMap(children)
+            .filter { $0.lastPathComponent.hasPrefix("local_") && $0.pathExtension == "json" }
     }
 }
 
@@ -139,15 +295,16 @@ enum TrailFinder {
             return
         }
 
-        // Claude Code sessions are addressable at CONVERSATION level: the
-        // desktop app's `claude://resume?session=<uuid>` deep link imports and
-        // opens the exact CLI session. Terminal/iTerm still win above (they
-        // are the session's real home); this handles turns run inside the
-        // desktop app, and gives dead terminal sessions a second life.
-        if completion.source?.lowercased() == "claude-code",
-           UUID(uuidString: completion.sessionID) != nil,
-           let deepLink = URL(string: "claude://resume?session=\(completion.sessionID)"),
-           NSWorkspace.shared.open(deepLink) {
+        // A Claude Code turn that ran inside the desktop app is addressable at
+        // CONVERSATION level, and that beats merely raising the app's window:
+        // the desktop app has one window, and it is showing whatever session
+        // the user opened last. Terminal and iTerm still win above — they are
+        // the session's real home — and a turn hosted anywhere else falls
+        // through to its own host, so an editor turn still returns to the
+        // editor.
+        if ConversationTrail.wasHostedByClaudeDesktop(locator),
+           let conversation = ConversationTrail.claudeDesktopConversationURL(for: completion),
+           NSWorkspace.shared.open(conversation) {
             return
         }
 
@@ -163,6 +320,8 @@ enum TrailFinder {
         }
 
         if let app = hostApp(locator) {
+            if app.isHidden { app.unhide() }
+            unminimizeWindows(of: app)
             raiseBestWindow(of: app, matching: workspaceHints(for: completion))
             app.activate()
             return
@@ -205,7 +364,10 @@ enum TrailFinder {
         let source = completion.source?.lowercased() ?? ""
         switch source {
         case "hermes":
-            return activateAppNamed("Hermes")
+            return await activateOrLaunchApp(
+                named: "Hermes",
+                bundleIDs: ["com.nousresearch.hermes", "com.nousresearch.hermes.setup"]
+            )
         case "openclaw":
             // The gateway's web UI is where webchat conversations live.
             if let url = URL(string: "http://127.0.0.1:\(openClawGatewayPort())") {
@@ -214,21 +376,106 @@ enum TrailFinder {
             }
             return false
         case "claude-code":
-            return activateAppNamed("Claude")
+            // The turn's host is gone — a terminal that has since closed, or a
+            // note old enough to predate the locator. If the desktop app holds
+            // the conversation anyway, that is still the way back to it.
+            if let conversation = ConversationTrail.claudeDesktopConversationURL(for: completion),
+               NSWorkspace.shared.open(conversation) {
+                return true
+            }
+            // Nobody holds it. Now `claude://resume?session=<uuid>` is the
+            // right tool rather than the wrong one: importing the transcript
+            // is the only second life a dead terminal session has. It stays
+            // withheld from turns that ran in the desktop app — if the lookup
+            // above found nothing for one of those, the store moved under us,
+            // and importing would leave the duplicate this all began with.
+            if !ConversationTrail.wasHostedByClaudeDesktop(completion.locator),
+               UUID(uuidString: completion.sessionID) != nil,
+               let deepLink = URL(string: "claude://resume?session=\(completion.sessionID)"),
+               NSWorkspace.shared.open(deepLink) {
+                return true
+            }
+            return await activateOrLaunchApp(
+                named: "Claude",
+                bundleIDs: ["com.anthropic.claudefordesktop"]
+            )
         default:
             return false
         }
     }
 
-    private static func activateAppNamed(_ name: String) -> Bool {
-        let match = NSWorkspace.shared.runningApplications.first {
-            $0.activationPolicy == .regular
-                && ($0.localizedName?.caseInsensitiveCompare(name) == .orderedSame
-                    || $0.bundleURL?.lastPathComponent.lowercased() == "\(name.lowercased()).app")
+    /// Bring the agent's own app forward — launching it when it is closed,
+    /// restoring it when its windows sit miniaturized in the Dock.
+    ///
+    /// A closed app used to fail this step outright and the trail fell through
+    /// to `revealInFinder`, so clicking a Hermes note with Hermes quit opened
+    /// the home folder. An installed app is the honest reading of that click,
+    /// running or not; only a missing one should hand the trail back.
+    ///
+    /// A *minimized* app was the same click with a quieter failure: `activate()`
+    /// makes an app frontmost but never un-miniaturizes it, so the menu bar
+    /// changed and the window stayed in the Dock. So a running app takes the
+    /// same launch path as a closed one — opening an already-running app sends
+    /// it the reopen event, which is exactly what a Dock icon click does, and
+    /// needs no Accessibility grant to work.
+    private static func activateOrLaunchApp(named name: String, bundleIDs: [String]) async -> Bool {
+        let running = runningApp(named: name, bundleIDs: bundleIDs)
+        if let running {
+            // Cmd-H'd apps hide rather than miniaturize, and reopen alone does
+            // not always bring those back.
+            if running.isHidden { running.unhide() }
+            // Belt and braces for an app that ignores reopen; a no-op when
+            // Cairn has no Accessibility grant.
+            unminimizeWindows(of: running)
         }
-        guard let match else { return false }
-        match.activate()
-        return true
+
+        guard let appURL = running?.bundleURL ?? installedAppURL(named: name, bundleIDs: bundleIDs) else {
+            // Running from a bundle we cannot name: activation is all we have.
+            running?.activate()
+            return running != nil
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        do {
+            _ = try await NSWorkspace.shared.openApplication(
+                at: appURL,
+                configuration: configuration
+            )
+            return true
+        } catch {
+            Logger.trail.error(
+                """
+                Could not launch \(name, privacy: .public): \
+                \(error.localizedDescription, privacy: .public)
+                """
+            )
+            running?.activate()
+            return running != nil
+        }
+    }
+
+    private static func runningApp(named name: String, bundleIDs: [String]) -> NSRunningApplication? {
+        let ids = Set(bundleIDs.map { $0.lowercased() })
+        return NSWorkspace.shared.runningApplications.first {
+            guard $0.activationPolicy == .regular else { return false }
+            if let bundleID = $0.bundleIdentifier?.lowercased(), ids.contains(bundleID) {
+                return true
+            }
+            return $0.localizedName?.caseInsensitiveCompare(name) == .orderedSame
+                || $0.bundleURL?.lastPathComponent.lowercased() == "\(name.lowercased()).app"
+        }
+    }
+
+    private static func installedAppURL(named name: String, bundleIDs: [String]) -> URL? {
+        for bundleID in bundleIDs {
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+                return url
+            }
+        }
+        let manager = FileManager.default
+        return ConversationTrail.applicationBundleCandidates(named: name).first {
+            manager.fileExists(atPath: $0.path)
+        }
     }
 
     private static func openClawGatewayPort() -> Int {
@@ -334,7 +581,13 @@ enum TrailFinder {
             candidatePaths.append(path)
         }
         for path in candidatePaths {
-            if let app = runningApp(bundlePath: path) {
+            // Same rule as the live climb above: a headless harness bundle is
+            // something the window server will not activate, and returning it
+            // would spend the click on nothing. Claude Code's own
+            // `claude.app` is exactly that, and it is the innermost candidate
+            // — so a match there must fall through to the desktop app behind
+            // it rather than end the search.
+            if let app = runningApp(bundlePath: path), app.activationPolicy != .prohibited {
                 return app
             }
         }
@@ -392,6 +645,38 @@ enum TrailFinder {
             url.deleteLastPathComponent()
         }
         return hints
+    }
+
+    /// Take the app's windows back out of the Dock.
+    ///
+    /// `NSRunningApplication.activate()` and `kAXRaiseAction` both leave a
+    /// miniaturized window miniaturized, so a note whose host was minimized
+    /// looked like a dead click. Clearing `AXMinimized` is the one way to undo
+    /// that from outside the app.
+    private static func unminimizeWindows(of app: NSRunningApplication) {
+        // Permission prompts only come from Cairn's Access center. A normal
+        // note click must never turn into an unexpected system interruption.
+        guard AXIsProcessTrusted() else { return }
+
+        let element = AXUIElementCreateApplication(app.processIdentifier)
+        var windowsRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXWindowsAttribute as CFString, &windowsRef) == .success,
+              let windows = windowsRef as? [AXUIElement] else { return }
+
+        for window in windows {
+            var minimizedRef: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(
+                window,
+                kAXMinimizedAttribute as CFString,
+                &minimizedRef
+            ) == .success,
+                  let minimized = minimizedRef as? Bool, minimized else { continue }
+            AXUIElementSetAttributeValue(
+                window,
+                kAXMinimizedAttribute as CFString,
+                kCFBooleanFalse
+            )
+        }
     }
 
     private static func raiseBestWindow(of app: NSRunningApplication, matching hints: [String]) {

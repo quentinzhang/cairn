@@ -349,6 +349,9 @@ final class PermissionExperience: ObservableObject {
             defer: false
         )
         window.title = L10n.string("access.window.title")
+        // Close and nothing else — the same chrome Settings and Connect keep.
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(
             rootView: PermissionCenterView(

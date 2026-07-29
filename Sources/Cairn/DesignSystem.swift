@@ -74,8 +74,20 @@ extension Cairn {
             Color.white.opacity(scheme == .dark ? 0.08 : 0.48)
         }
 
-        static let controlResting = Color.white.opacity(0.12)
-        static let controlHover = Color.white.opacity(0.28)
+        /// The one place the rule above bends. A borrowed-light edge is
+        /// invisible on a white desktop, which left the control's shadow doing
+        /// all the work of saying where the control ends — and a shadow asked
+        /// to draw an edge has to be dark enough to look like one. On light the
+        /// control takes a stone hairline instead, and the shadow goes back to
+        /// being depth.
+        static func controlResting(_ scheme: ColorScheme) -> Color {
+            scheme == .dark ? .white.opacity(0.12) : Stone.s50.opacity(0.20)
+        }
+
+        static func controlHover(_ scheme: ColorScheme) -> Color {
+            scheme == .dark ? .white.opacity(0.28) : Stone.s50.opacity(0.30)
+        }
+
         static let badge = Color.white.opacity(0.40)
     }
 
@@ -337,13 +349,47 @@ extension Cairn {
         static let noteRailHeight: CGFloat = 54
         /// The pill that clears the whole queue, pinned under the stack.
         static let noteClearAllHeight: CGFloat = 26
+        /// A stacked note's shoulder: how far the card underneath peeks out
+        /// below the top one, and how far it is drawn in from each side. Enough
+        /// curve to read as another card, not enough to be mistaken for one you
+        /// can act on.
+        static let noteStackShoulder: CGFloat = 6
+        static let noteStackInset: CGFloat = 8
 
+        /// The desktop control at rest. Every part of it — panel, body, mark,
+        /// badge — is these numbers times `CairnControlSize.scale`, so the two
+        /// sizes it offers are one multiplication rather than two sets of
+        /// tuned values.
         static let controlPanel = CGSize(width: 72, height: 82)
         static let controlBody = CGSize(width: 58, height: 66)
+        static let controlMark = CGSize(width: 54, height: 59)
         static let badgeSize: CGFloat = 19
+
+        /// How far a shadow may reach past the control before the panel window
+        /// cuts it off: 7pt to either side, 8pt above and below. Cairn's panels
+        /// are transparent windows drawn tight around their content, and a blur
+        /// that runs past the frame is not faded, it is truncated — which is
+        /// what a dark ring around the control actually is.
+        static let controlShadowRoom = CGSize(
+            width: (controlPanel.width - controlBody.width) / 2,
+            height: (controlPanel.height - controlBody.height) / 2
+        )
+
+        /// The same room around a note: the queue pads its cards by `Space.lg`
+        /// and the panel ends there.
+        static let noteShadowRoom = Space.lg
 
         static let menuWidth: CGFloat = 340
         static let dismissTarget: CGFloat = 19
+
+        /// The settings window. Nothing in it reflows — it is a sheet of
+        /// switches, not a document — so the size is tuned here like the
+        /// control's rather than left to the content.
+        static let settingsWindow = CGSize(width: 520, height: 740)
+        /// The mark that heads that window, as a multiple of the one the
+        /// desktop control draws. Large enough to read as the product's face,
+        /// not so large that the switches start below the fold.
+        static let settingsMarkScale: CGFloat = 1.15
 
         /// The note queue draws its own scroll thumb: the system overlay
         /// scroller can't be slimmed and disappears over light wallpaper.
@@ -382,8 +428,11 @@ extension Cairn {
         static let meta = Font.caption
         /// Relative time.
         static let micro = Font.caption2
-        /// Count badge. Rounded, because it sits on the mark, not in text.
-        static let badge = Font.system(size: 9, weight: .bold, design: .rounded)
+        /// Count badge. Rounded, because it sits on the mark, not in text —
+        /// and the one label that grows with the desktop control.
+        static func badge(_ scale: CGFloat = 1) -> Font {
+            .system(size: 9 * scale, weight: .bold, design: .rounded)
+        }
         /// Glyphs inside small circular targets.
         static let glyph = Font.system(size: 9, weight: .bold)
     }
@@ -395,24 +444,87 @@ extension Cairn {
     /// Cairn owns no chrome, so depth is the only way a surface says it is
     /// above the desktop. Four levels, all soft and all downward except the
     /// attention glow, which is centred so it reads as light, not as height.
+    ///
+    /// Each level is drawn in two passes, the way light actually falls: an
+    /// ambient wash that says how far off the desktop the surface floats, and a
+    /// shorter contact pass that seats its lower edge. One blur dark enough to
+    /// be felt is also dark enough to show its own rim; the pair carries the
+    /// same weight with a falloff that has nowhere to break.
+    ///
+    /// Both passes are then sized to the room the surface actually has. Cairn
+    /// draws into transparent windows fitted tightly around their content, and
+    /// a window does not fade a blur that runs past its frame — it cuts it. A
+    /// generous radius in a tight panel therefore does not read as a soft
+    /// shadow at all: it reads as a grey band with a hard outer edge, obvious
+    /// on white and hidden on black, which is precisely how the rim around the
+    /// control used to look. So a level's extent — roughly `2 × radius + y` —
+    /// stays inside `Metrics.controlShadowRoom` / `Metrics.noteShadowRoom`.
+    /// Depth here is bought with tone, never with reach.
     struct Shadow {
-        let color: Color
-        let radius: CGFloat
-        let y: CGFloat
+        struct Layer {
+            let color: Color
+            let radius: CGFloat
+            let y: CGFloat
+        }
 
-        /// A note resting in the queue.
+        /// The far pass: the wider, fainter one.
+        let ambient: Layer
+        /// The near pass, seating the edge. Absent where a second blur would
+        /// only muddy something small.
+        let contact: Layer?
+
+        /// Shadows on a light desktop are cast in stone rather than in black.
+        /// Neutral black over cream or white greys everything it crosses and
+        /// reads as dirt on the wallpaper; the mark's own cool green-grey reads
+        /// as depth. On a dark desktop black is still the honest answer.
+        static func ink(_ scheme: ColorScheme) -> Color {
+            scheme == .dark ? .black : Stone.s70
+        }
+
+        /// A note resting in the queue. Room: 12pt to the panel edge, and 8pt
+        /// to the card below — a shadow landing on that card is light falling
+        /// where it should, so the panel edge is the constraint.
         static func note(_ scheme: ColorScheme) -> Shadow {
-            Shadow(
-                color: .black.opacity(scheme == .dark ? 0.22 : 0.13),
-                radius: 12,
-                y: 6
+            let dark = scheme == .dark
+            return Shadow(
+                ambient: Layer(color: ink(scheme).opacity(dark ? 0.20 : 0.10), radius: 4, y: 3),
+                contact: Layer(color: ink(scheme).opacity(dark ? 0.12 : 0.055), radius: 1.5, y: 1)
             )
         }
 
-        static let controlResting = Shadow(color: .black.opacity(0.22), radius: 9, y: 5)
-        static let controlHover = Shadow(color: .black.opacity(0.22), radius: 13, y: 5)
-        static let controlAttention = Shadow(color: Brand.jadeGlow.opacity(0.54), radius: 17, y: 1)
-        static let badge = Shadow(color: .black.opacity(0.18), radius: 3, y: 1)
+        /// The control, with 7pt of room to its sides and 8pt above and below.
+        /// Hovering deepens the tone rather than widening the blur; the reach
+        /// is fixed by the window, and the lift is carried by `Motion.hover`.
+        static func controlResting(_ scheme: ColorScheme) -> Shadow {
+            control(scheme, ambient: scheme == .dark ? 0.26 : 0.12)
+        }
+
+        static func controlHover(_ scheme: ColorScheme) -> Shadow {
+            control(scheme, ambient: scheme == .dark ? 0.32 : 0.16)
+        }
+
+        private static func control(_ scheme: ColorScheme, ambient: Double) -> Shadow {
+            Shadow(
+                ambient: Layer(color: ink(scheme).opacity(ambient), radius: 3, y: 2),
+                contact: Layer(color: ink(scheme).opacity(ambient * 0.5), radius: 1, y: 0.5)
+            )
+        }
+
+        /// The arrival glow. It has the same 7pt to work in as the shadow it
+        /// replaces, so it is a bright rim rather than a bloom — the reach the
+        /// signal needs comes from the halo the mark throws inside the control,
+        /// which no window edge can cut.
+        static let controlAttention = Shadow(
+            ambient: Layer(color: Brand.jadeGlow.opacity(0.62), radius: 3.5, y: 0),
+            contact: Layer(color: Brand.jadeGlow.opacity(0.38), radius: 1.5, y: 0)
+        )
+
+        /// The badge is 19pt across. A second pass on something that small only
+        /// muddies it.
+        static let badge = Shadow(
+            ambient: Layer(color: .black.opacity(0.16), radius: 2, y: 1),
+            contact: nil
+        )
     }
 
     /// Gradients that describe the mark. Light falls from the top left on every
@@ -442,7 +554,44 @@ extension Cairn {
             )
         }
 
-        static let groundShadow = Color.black.opacity(0.24)
+        /// The pool the stack stands in. Faint, and blurred by
+        /// `groundShadowBlur` where it is drawn — a crisp 24% ellipse read as a
+        /// fourth stone lying flat rather than as the ground giving way.
+        static let groundShadow = Color.black.opacity(0.17)
+
+        /// Blur applied to that pool, in mark units, so it scales with the mark.
+        static let groundShadowBlur: CGFloat = 3.5
+
+        /// The ground a Cairn window stands on: wet stone in the dark, dry
+        /// sand in the light. Vertical and lit from above, like every other
+        /// surface the product draws, so the mark at the top of the window
+        /// sits in the light and the way out sits in the shade.
+        static func windowGround(_ scheme: ColorScheme) -> LinearGradient {
+            LinearGradient(
+                colors: scheme == .dark
+                    ? [Stone.s80, Stone.s90]
+                    : [.white, Stone.s00],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+
+        /// A card resting on that ground. Always light borrowed from above —
+        /// a darker rectangle would read as a hole cut in the window rather
+        /// than as a group of rows lifted off it.
+        static func card(_ scheme: ColorScheme) -> Color {
+            Color.white.opacity(scheme == .dark ? 0.05 : 0.70)
+        }
+
+        /// One alpha step — thin enough to be invisible, thick enough to exist.
+        ///
+        /// macOS routes the pointer *through* any pixel a borderless window
+        /// leaves fully clear, and the note panel only paints where its cards
+        /// are. That handed every scroll wheel event landing in the gap between
+        /// two cards to whatever sat behind the panel, so the queue stopped
+        /// scrolling wherever the pointer happened to rest. Painting the whole
+        /// panel with a veil makes the gaps part of the window again.
+        static let eventVeil = Color.black.opacity(0.01)
     }
 }
 
@@ -483,8 +632,22 @@ extension Color {
     }
 }
 
+extension CGSize {
+    func scaled(by factor: CGFloat) -> CGSize {
+        CGSize(width: width * factor, height: height * factor)
+    }
+}
+
 extension View {
+    /// Contact first, then ambient: the near pass has to be laid down before
+    /// the far one so the wide wash falls across it rather than under it.
     func cairnShadow(_ shadow: Cairn.Shadow) -> some View {
-        self.shadow(color: shadow.color, radius: shadow.radius, y: shadow.y)
+        self
+            .shadow(
+                color: shadow.contact?.color ?? .clear,
+                radius: shadow.contact?.radius ?? 0,
+                y: shadow.contact?.y ?? 0
+            )
+            .shadow(color: shadow.ambient.color, radius: shadow.ambient.radius, y: shadow.ambient.y)
     }
 }

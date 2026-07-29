@@ -231,7 +231,11 @@ Notes for producers:
 
 - `host_apps` exists because bundles stack — a headless harness bundle can sit
   under a desktop app — and only the resolver at click time can tell which layer
-  is a real, activatable GUI app. Send the whole chain; do not pre-pick.
+  is a real, activatable GUI app. Send the whole chain; do not pre-pick. The
+  chain also decides whether a conversation-level deep link is safe to follow:
+  a link that *imports* a session — Claude Code's `claude://resume` does — has
+  to be withheld from a turn whose host app already holds that conversation,
+  or one conversation becomes two entries there.
 - Cut each path at the **first** `.app/` boundary so Electron helper bundles
   resolve to their outer application, and skip anything with `.framework/`
   before that boundary.

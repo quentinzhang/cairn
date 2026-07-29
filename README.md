@@ -1,13 +1,16 @@
-# Cairn 跡
+<div align="center">
 
-**Your coding agents finish work while you are looking elsewhere. Cairn leaves a
-small stone where each one landed.**
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/cairn-mark-dark.svg">
+  <img src="docs/assets/cairn-mark.svg" width="72" alt="">
+</picture>
 
-A quiet native macOS companion for completed Codex, Hermes, Claude Code, and
-OpenClaw turns. When a turn finishes, Cairn presents the result as a floating
-note instead of a system notification or another window competing for your
-attention. Click the note and it takes you back to the exact terminal tab the
-turn ran in.
+# Cairn
+
+**A trail for every task.**
+
+Your coding agents finish while you are looking elsewhere.<br>
+Cairn leaves a small note where each one landed — click it to go back.
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md)
 
@@ -16,156 +19,158 @@ turn ran in.
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/macOS-14%2B-lightgrey)
 
-- **No Dock icon, no notifications, no focus stealing.** Cairn lives in the menu
-  bar and draws its own non-activating panels. It never takes your keyboard.
-- **One control.** A small cairn of three river stones: click to expand or
-  collapse the queue, drag it somewhere quieter. It remembers where you put it.
-- **One note per session.** A later turn from the same session updates its
-  existing note instead of stacking another one. Up to 50 sessions, six visible
-  at a time.
-- **Colour-coded by agent.** Codex teal, Hermes violet, Claude Code terracotta,
-  OpenClaw blue.
-- **Speaks your Mac's language.** English, Simplified Chinese, and Japanese,
-  with an in-app language selector that can also follow the system setting.
-- **寻迹 — follow the trail back.** Clicking a note returns you to where the turn
-  ran: the exact Terminal/iTerm2 session, the hosting app window, or — for a
-  Codex desktop turn — the exact conversation via `codex://threads/<session_id>`.
-- **Local only.** No account, no server, no telemetry. The only network request
-  checks GitHub Releases once a day or when you choose **Check for Updates**.
+### [⬇︎ Download for macOS](https://github.com/quentinzhang/cairn/releases/latest)
 
-Cairn does not integrate with agents — **it reads a directory**. Anything that
-can write a JSON file can leave a note, so supporting a new runtime needs no
-change to this app. See [the inbox protocol](docs/inbox-protocol.md).
+</div>
 
 ---
 
+## What it does
+
+When your coding agent — say **Codex** or **Claude Code** — finishes a turn, a
+note settles beside a small stack of three river stones on your desktop.
+
+- **Never interrupts.** No Dock icon, no system notification, no window that
+  takes your keyboard. Cairn reports; it never demands a reply.
+- **Everything stacks.** One note per session, coloured by agent, gathered into
+  one stack per agent per project. Fifty sessions are remembered.
+- **Follows the trail back.** Click a note and Cairn returns you to where the
+  turn ran — the exact Terminal/iTerm2 tab, the app window, or the Codex
+  conversation itself.
+- **Yours alone.** No account, no server, no telemetry. Everything stays on
+  this Mac.
+
+Cairn does not integrate with agents — **it reads a directory**. Anything that
+can write a JSON file can leave a note, so a new runtime needs no change to the
+app. See [the inbox protocol](docs/inbox-protocol.md).
+
 ## Install
 
-Download the notarized `.dmg` from
-[Releases](https://github.com/quentinzhang/cairn/releases/latest), or build it:
+1. Download the notarized `.dmg` from
+   [Releases](https://github.com/quentinzhang/cairn/releases/latest) and drag
+   **Cairn** into Applications.
+2. Open it. On first launch Cairn finds the coding agents installed on this Mac
+   and lists them — today **Codex**, **Claude Code**, **OpenClaw**, and
+   **Hermes**.
+3. Click **Connect** on each one you use, then **Start Using Cairn**.
 
-```bash
-git clone https://github.com/quentinzhang/cairn.git
-cd cairn
-./Scripts/build_app.sh
-open dist/Cairn.app
-```
+That is the whole setup — **no terminal, no scripts, no config files to edit.**
+Connecting writes exactly one handler into that agent's own config and leaves
+everything else untouched; **Disconnect** removes exactly that handler again. A
+row marked *needs attention* is repaired by the same click. Reopen the window
+any time from **Apps** in Cairn's menu.
 
-Requires macOS 14+; building needs Xcode 16+. There are no dependencies to
-fetch — only system frameworks and the Python 3 / Node.js standard libraries.
+Requires macOS 14 or later.
 
-Then connect whichever agents you use — from inside Cairn. On first launch it
-detects the agents on this Mac and offers to connect them; **Connect** in the
-menu opens the same window at any time. One click writes exactly one handler
-into that agent's own config, preserves everything else, and **Disconnect**
-removes exactly that handler again. Clicking Connect on a row that says *needs
-attention* also repairs it — a hook left behind by a checkout you moved or
-deleted is replaced, not duplicated.
+A few agents need one more step of their own, which Cairn spells out in the row
+right after you connect:
 
-Nothing about it requires a checkout: a downloaded `.app` carries its own
-bridges and installers, and every hook it writes points inside the bundle.
+| Agent | After connecting |
+| --- | --- |
+| **Codex** | Run `/hooks` inside Codex once and trust the Cairn handler — Codex will not execute one it does not trust. |
+| **Claude Code** | Nothing. (Interrupted turns and API failures never fire `Stop`, so they leave no note.) |
+| **OpenClaw** | Cairn asks once whether it may read the final message, then restarts the managed Gateway for you. |
+| **Hermes** | Restart Hermes if it was already running. |
 
-The same thing from a terminal, if you prefer one:
+## Living with it
 
-```bash
-python3 Scripts/cairn_connect.py status              # what is detected, what is wired
-python3 Scripts/cairn_connect.py connect claude      # codex · claude · openclaw · hermes · skills
-python3 Scripts/cairn_connect.py disconnect claude
-```
+- **The stones** sit on your desktop: click to expand or collapse the queue,
+  drag them somewhere quieter. They remember where you put them.
+- **⌃⌥⌘C** shows and hides the notes from any app — the default shortcut, and
+  yours to change in Settings.
+- **Clicking a note** follows the trail back.
+- **Notes stay organised** — coloured by agent, and stacked into one pile per
+  agent per project.
 
-The per-agent installers (`Scripts/install_*.py`) still exist and still work;
-`cairn_connect.py` is what drives them.
-
-Notes per agent:
-
-- **Codex** — run `/hooks` inside Codex and trust the new global hook; Codex
-  will not execute an untrusted one.
-- **Claude Code** — interrupted turns and API failures do not fire `Stop`, so
-  they produce no note.
-- **OpenClaw** — connecting asks once whether Cairn may read the final
-  conversation, then restarts the managed Gateway for you. Desktop or unmanaged
-  setups may need a manual restart. From the command line, answer up front with
-  `--allow-conversation-access`.
-- **Hermes** — covers Desktop, CLI, and Gateway turns that produce final
-  assistant output.
-
-Complete a turn in any connected agent and a note appears. Use **Check for
-Updates** in Cairn's menu at any time — Cairn never downloads or installs an
-update without you.
-
-## When something does not arrive
+## When a note does not arrive
 
 Bridges fail silently on purpose — a completion hook must never break the agent
-it runs inside — so there is a tool whose whole job is to explain the silence:
+it runs inside — so one tool exists to explain the silence:
 
 ```bash
-python3 Scripts/cairn_doctor.py        # add --probe to trace a test note end to end
+python3 /Applications/Cairn.app/Contents/Resources/cairn_doctor.py
 ```
 
-For each runtime you have installed it names the cause and the fix: a hook
-pointing at a moved checkout, a plugin linked but not enabled, a malformed
-payload in the inbox, a second copy of the app stealing notes. Its output is
-safe to paste into an issue: no note bodies, no prompts, no absolute paths
-outside the checkout.
+For every runtime you have installed it names the cause and the fix: a hook
+pointing at something that moved, a plugin linked but not enabled, a malformed
+payload in the inbox, a second copy of the app stealing notes. Add `--probe` to
+trace a test note end to end. The output is safe to paste into an issue — no
+note bodies, no prompts, no paths from outside the app.
 
 ## Privacy
 
-Each bridge extracts exactly two things from a completed turn — **the final
+Each bridge keeps exactly two things from a finished turn — **the final
 assistant message and the most recent user prompt** — and discards the rest. No
 reasoning traces, no tool calls, no file contents.
 
-Notes live in two plaintext files in your home directory, mode `0700`,
-unencrypted — treat them like your shell history:
+Notes live in two plaintext files in your home directory, mode `0700` — treat
+them like your shell history:
 
 ```
 ~/Library/Application Support/Cairn/inbox/            one file per turn, deleted on read
 ~/Library/Application Support/Cairn/completions.json  the 50 most recent sessions
 ```
 
-The core queue needs **no** macOS privacy permission. Accessibility and
-Automation are optional upgrades that make trail-back precise, granted one app
-at a time from **Access** in the menu bar; missing access simply degrades to
-activating the app, then to Finder. Full detail, including complete removal:
-[SECURITY.md](SECURITY.md).
+The queue needs **no** macOS privacy permission. Accessibility and Automation
+are optional upgrades that make the trail back precise, granted one app at a
+time under **Access**; without them a click simply degrades to activating the
+app, then to Finder. The only network request checks GitHub Releases once a
+day. Full detail, including complete removal: [SECURITY.md](SECURITY.md).
 
-## Anything else
+## Anything can leave a note
 
-Write a producer against [`docs/inbox-protocol.md`](docs/inbox-protocol.md) — a
-CI pipeline, a long build, another agent runtime. The shortest version is one
+A CI pipeline, a long build, another agent runtime — write a producer against
+[`docs/inbox-protocol.md`](docs/inbox-protocol.md). The shortest version is one
 line:
 
 ```bash
-echo "All 214 tests passed." | python3 Scripts/cairn_save.py --source ci --prompt "nightly build"
+echo "All 214 tests passed." | python3 /Applications/Cairn.app/Contents/Resources/cairn_save.py \
+  --source ci --prompt "nightly build"
 ```
 
-## Saving a note on purpose
+<details>
+<summary><b>From the terminal</b> — the same setup, and the <code>cairn-save</code> skill</summary>
+
+Everything the Connect window does is one script, bundled inside the app:
 
 ```bash
-python3 Scripts/cairn_connect.py connect skills
+cd /Applications/Cairn.app/Contents/Resources
+python3 cairn_connect.py status              # what is detected, what is wired
+python3 cairn_connect.py connect claude      # codex · claude · openclaw · hermes · skills
+python3 cairn_connect.py disconnect claude
 ```
 
-Installs the `cairn-save` skill for Claude Code and Codex. Ask either agent to
-"保存到 Cairn", or run `/cairn-save`, and it publishes a deliberate conclusion
-note that trails back to where it was saved from — distinct from the automatic
-Stop-hook capture.
+`connect skills` is the one target with no button, because it is a Cairn
+feature rather than an agent: it installs the `cairn-save` skill for Claude Code
+and Codex. Ask either agent to "save this to Cairn", or run `/cairn-save`, and
+it publishes a deliberate conclusion note that trails back to where it was
+saved from — distinct from the automatic capture when a turn ends.
+
+The per-agent installers (`install_*.py`) still exist and still work;
+`cairn_connect.py` is what drives them.
+
+</details>
 
 ## Development
 
 ```bash
+git clone https://github.com/quentinzhang/cairn.git && cd cairn
 swift build && swift test                     # the app
 /usr/bin/python3 Tests/protocol_roundtrip.py  # every bridge, against the protocol
-./Scripts/build_app.sh                        # package dist/Cairn.app
+./Scripts/build_app.sh && open dist/Cairn.app # package and run
 python3 Scripts/cairn_reset.py                # what a first-run reset would remove
 ```
 
-Onboarding only happens once, which makes it the hardest part to test.
-`cairn_reset.py` walks it back — disconnects every agent, clears the queue and
-the preferences, and leaves the app in place — so the next launch is a first
-launch again — privacy grants included, so the permission prompts are part of
-the replay. It prints its plan and changes nothing until `--yes`;
-`--keep-permissions` spares the grants.
+Building needs Xcode 16+. There are no dependencies to fetch — only system
+frameworks and the Python 3 / Node.js standard libraries.
 
-The protocol tests and Swift tests lock opposite ends of
+Onboarding happens once, which makes it the hardest part to test.
+`cairn_reset.py` walks it back — disconnects every agent, clears the queue, the
+preferences, and the privacy grants, and leaves the app in place — so the next
+launch is a first launch again. It prints its plan and changes nothing until
+`--yes`; `--keep-permissions` spares the grants.
+
+The protocol tests and the Swift tests lock opposite ends of
 [`docs/inbox-protocol.md`](docs/inbox-protocol.md); change one and expect the
 other to complain. The design system is load-bearing — every colour, radius,
 and duration is defined once in
@@ -184,25 +189,20 @@ See [the release guide](docs/releasing.md) for setup and recovery.
 
 ## Boundaries
 
-- Covers Codex CLI/App sessions with a trusted user-level hook; Claude Code
-  sessions with the user-level `Stop` hook; Hermes and OpenClaw sessions with
-  the plugin enabled.
-- The app receives the final result only — not streaming progress, not tool logs.
-- The 50 most recent sessions are retained locally. No history beyond that, no
-  sync between machines.
+- Cairn receives the final result only — not streaming progress, not tool logs.
+- The 50 most recent sessions are kept locally. No history beyond that, no sync
+  between machines.
 - macOS 14+ only. The inbox protocol is portable; this app is not.
 
 ## Contributing
 
-Bug reports, producers for other runtimes, and trail-back fixes are all welcome.
-Start with [CONTRIBUTING.md](CONTRIBUTING.md), and run the doctor before filing
-anything.
+Bug reports, producers for other runtimes, and trail-back fixes are all
+welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), and run the doctor
+before filing anything.
 
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE).
 
 The code is open. The **name "Cairn", the wordmark 跡, and the stone mark** are
-not licensed with it — see [NOTICE](NOTICE). Fork freely; if you ship a modified
-build, give it your own name and icon. Describing your tool as compatible with
-Cairn, or as implementing the Cairn inbox protocol, is always fine.
+not licensed with it — see [NOTICE](NOTICE).

@@ -337,6 +337,10 @@ Surfaces are separated with a **light** hairline, never a dark one. Panels
 float over wallpaper nobody chose for them; a light edge reads on both a black
 terminal and a white document.
 
+The desktop control is the exception, and §6 explains why: it is the one
+surface whose shadow has no room to spread, so on a light desktop its edge has
+to be a hairline that is actually there.
+
 ---
 
 ## 4. Type
@@ -383,16 +387,50 @@ part of the system, not call-site details:
 | `noteCardSpacing` | 8 |
 | `noteRail` | 3 × 54 |
 | `noteClearAllHeight` | 26 |
+| `noteStackShoulder` / `noteStackInset` | 6 / 8 |
 | `controlPanel` | 72 × 82 |
 | `controlBody` | 58 × 66 |
+| `controlMark` | 54 × 59 |
 | `badgeSize` | 19 |
 | `menuWidth` | 340 |
 | `panelGap` / `screenMargin` | 10 / 8 |
 | `firstRunInset` | 18 × 34 |
+| `settingsWindow` | 520 × 664 |
+| `settingsMarkScale` | 1.15 |
 
 `noteCardHeight` is the one number everything else in the queue is derived
 from: panel height is `count × (height + spacing) + padding`, which is why a
 card must never grow to fit its content.
+
+`noteStackShoulder` and `noteStackInset` describe a stack: notes from one agent
+working in one project arrive as a single row, with the edges of the ones
+underneath drawn 8pt in from each side and slid 6pt down. Two shoulders at
+most — past two, a deeper pile only gets taller without saying anything more.
+A closed stack therefore costs `noteCardHeight + 6 × min(count − 1, 2)`, and an
+open one costs every card in it; `NoteQueue` owns that arithmetic because the
+`NSPanel` has to be sized before SwiftUI draws a single card into it. Opening a
+stack is a chip in the note's header rather than a click on the card, because
+the card already has a job: it goes back to where the turn ran.
+
+The four `control*` values describe the desktop control at rest. Settings
+offers it in three sizes — `small 0.78 · regular 1 · large 1.34` — and each is
+these numbers times `CairnControlSize.scale`: panel, body, mark, badge and the
+radius that rounds them all move together, so the control never grows out of
+the panel that has to hold it. Small stops where it does because that is the
+last step at which the body still clears the 44pt pointer target; smaller is
+not a discreet control, it is a missed click.
+
+`Surface.windowGround(scheme)` is the ground a Cairn window stands on — wet
+stone in the dark, dry sand in the light, always lit from the top — and
+`Surface.card(scheme)` is the group of rows resting on it. The card is white at
+low alpha in both schemes: light borrowed from above reads as a surface lifted
+off the window, where a darker rectangle would read as a hole cut into it.
+
+`Surface.eventVeil` is not a colour anyone is meant to see. macOS routes the
+pointer through any pixel a borderless window leaves fully clear, so the note
+panel — which paints only where its cards are — used to hand every scroll event
+landing between two cards to the app behind it. One alpha step across the whole
+panel makes the gaps part of the window again.
 
 ---
 
@@ -400,17 +438,59 @@ card must never grow to fit its content.
 
 Cairn owns no chrome, so depth is the only way a surface says it is above the
 desktop. Four levels, all soft, all downward — except the attention glow, which
-is centred (`y: 1`) so it reads as light rather than as height.
+is centred so it reads as light rather than as height.
 
-| Token | Colour | Radius | Y |
-| --- | --- | --- | --- |
-| `Shadow.note(scheme)` | black 13% / 22% | 12 | 6 |
-| `Shadow.controlResting` | black 22% | 9 | 5 |
-| `Shadow.controlHover` | black 22% | 13 | 5 |
-| `Shadow.controlAttention` | jade glow 54% | 17 | 1 |
-| `Shadow.badge` | black 18% | 3 | 1 |
+**A shadow may never be wider than the room it has.** This is the rule the rest
+of the section follows from. Cairn draws into transparent panel windows fitted
+tightly around their content: the control body has 7pt to either side of it
+before the window ends, a note card has 12pt. A window does not fade a blur
+that runs past its frame — it cuts it. A generous radius in a tight panel
+therefore does not read as a soft shadow at all; it reads as a grey band with a
+hard outer edge, obvious on white and invisible on black. Measured on white,
+the old `controlResting` (black 22%, radius 9) was still 2.8% dark at the last
+pixel inside the window and 0% at the next one: a step, all the way around the
+control. That is what a dark ring around the control is. So each level's
+extent — roughly `2 × radius + y` — stays inside `Metrics.controlShadowRoom`
+(7 × 8) or `Metrics.noteShadowRoom` (12). Depth is bought with tone, never with
+reach.
+
+Within that budget every level is two passes, not one: an **ambient** wash that
+says how far off the desktop the surface floats, and a shorter **contact** pass
+that seats its lower edge. A single blur dark enough to be felt is also dark
+enough to show its own rim.
+
+| Token | Ambient (colour · radius · y) | Contact (colour · radius · y) |
+| --- | --- | --- |
+| `Shadow.note(scheme)` | ink 10% / 20% · 4 · 3 | ink 5.5% / 12% · 1.5 · 1 |
+| `Shadow.controlResting(scheme)` | ink 12% / 26% · 3 · 2 | ink at half · 1 · 0.5 |
+| `Shadow.controlHover(scheme)` | ink 16% / 32% · 3 · 2 | ink at half · 1 · 0.5 |
+| `Shadow.controlAttention` | jade glow 62% · 3.5 · 0 | jade glow 38% · 1.5 · 0 |
+| `Shadow.badge` | black 16% · 2 · 1 | — |
+
+Percentage pairs are light / dark scheme. `Shadow.ink(scheme)` is the colour a
+shadow is cast in: black on a dark desktop, but `Stone.s70` on a light one —
+neutral black over cream or white greys everything it crosses and reads as dirt
+on the wallpaper, where the mark's own cool green-grey reads as depth.
+
+Hovering deepens the tone rather than widening the blur; the reach is fixed by
+the window, and the lift is carried by `Motion.hover` scaling the control. The
+badge is 19pt across, small enough that a second pass would only muddy it. The
+attention glow gets the same 7pt as the shadow it replaces, so it is a bright
+rim rather than a bloom — the reach that signal needs comes from the halo the
+mark throws *inside* the control, which no window edge can cut.
 
 Apply with `.cairnShadow(_:)`, never `.shadow(color:radius:y:)`.
+
+A shadow this short only works if something else draws the edge, and on a light
+desktop a borrowed-light hairline is invisible. So `Stroke.controlResting` and
+`Stroke.controlHover` are scheme-aware: white 12% / 28% on dark, `Stone.s50` at
+20% / 30% on light. This is the one place the light-edges-only rule in §3 bends,
+and it is what lets the shadow go back to being depth instead of an outline.
+
+The mark carries one more shadow of its own: `Surface.groundShadow`, the pool
+the stack stands in. It is drawn blurred by `Surface.groundShadowBlur` (in mark
+units, so it scales with the mark) — a crisp ellipse reads as a fourth stone
+lying flat.
 
 ---
 
@@ -454,6 +534,17 @@ shorter than the card, so it reads as a bookmark rather than a border.
 **Menu bar control center** (`MenuBarQueueView`) — contains status and controls
 only. Note contents and queue counts stay on the floating surface, keeping one
 authoritative place to read, follow, and dismiss completed turns.
+
+**Settings window** (`CairnSettingsView`) — the mark and the name at the top,
+then two titled cards on `Surface.windowGround`, then one full-width Done. It
+is the only window that is about Cairn rather than about a note, which is why
+it is the only one that opens with the product's own face; nothing else is in
+the header, because a line explaining what a settings window is for is a line
+nobody reads twice. Rows are label-and-control; rows that open another window
+(Connect, Access) are whole-row targets with a chevron, and Connect carries the
+same agent marks the menu bar shows. Every Cairn window keeps close and nothing
+else — these are fixed sheets, so zoom has nothing to do, and an app with no
+Dock icon cannot get a minimised window back.
 
 ---
 

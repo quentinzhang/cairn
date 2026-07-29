@@ -38,16 +38,20 @@ struct CairnApp: App {
     @StateObject private var updateChecker: UpdateChecker
     @StateObject private var permissions: PermissionExperience
     @StateObject private var connections: AgentConnectionCenter
+    @StateObject private var settings: CairnSettings
 
     init() {
         let languageSettings = LanguageSettings.shared
         _languageSettings = StateObject(wrappedValue: languageSettings)
+        let settings = CairnSettings.shared
+        _settings = StateObject(wrappedValue: settings)
         let store = CompletionStore()
         _store = StateObject(wrappedValue: store)
         _presenter = StateObject(
             wrappedValue: FloatingQueuePresenter(
                 store: store,
-                languageSettings: languageSettings
+                languageSettings: languageSettings,
+                settings: settings
             )
         )
         let updateChecker = UpdateChecker()
@@ -59,9 +63,11 @@ struct CairnApp: App {
 
     var body: some Scene {
         // Until onboarding finishes there is no menu bar icon: the connect
-        // window is the whole app, and Start is what turns the rest on.
+        // window is the whole app, and Start is what turns the rest on. After
+        // that it is the user's to keep or hide — hidden, the desktop control's
+        // own menu is the way back in.
         MenuBarExtra(isInserted: Binding(
-            get: { connections.surfacesActive },
+            get: { connections.surfacesActive && settings.showsMenuBarIcon },
             set: { _ in }
         )) {
             MenuBarQueueView(
@@ -69,7 +75,8 @@ struct CairnApp: App {
                 updateChecker: updateChecker,
                 permissions: permissions,
                 connections: connections,
-                languageSettings: languageSettings
+                languageSettings: languageSettings,
+                settings: settings
             )
         } label: {
             Image(nsImage: CairnMenuBarIcon.shared)
@@ -238,7 +245,7 @@ struct CairnHostApp: Codable, Hashable, Sendable {
     let pid: Int?
 }
 
-private extension CodexCompletion {
+extension CodexCompletion {
     var normalizedSource: String {
         let explicit = source?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
         if !explicit.isEmpty {
@@ -307,7 +314,15 @@ final class CompletionStore: ObservableObject {
     }
 
     func dismiss(sessionKey: String) {
-        completions.removeAll { $0.sessionKey == sessionKey }
+        dismiss(sessionKeys: [sessionKey])
+    }
+
+    /// A collapsed stack is one object on screen, so its × has to take the
+    /// whole pile — dismissing only the card you can see would leave the ones
+    /// under it to spring back up in its place.
+    func dismiss(sessionKeys: Set<String>) {
+        guard !sessionKeys.isEmpty else { return }
+        completions.removeAll { sessionKeys.contains($0.sessionKey) }
         save()
         onQueueChange?(completions.count)
     }
@@ -422,21 +437,33 @@ final class FileInboxWatcher: @unchecked Sendable {
 final class FloatingQueuePresenter: ObservableObject {
     @Published private(set) var presentsNotes: Bool
     @Published private(set) var isCallingAttention = false
+    /// Which stack is open, if any. One at a time, like the notification centre
+    /// this borrows from: two open piles and the queue stops being a queue.
+    ///
+    /// It lives here rather than in the view because the panel is sized by
+    /// AppKit — the window has to know how tall the open stack is before
+    /// SwiftUI draws a single card of it.
+    @Published private(set) var expandedStackKey: String?
 
     private let notesPanel: NSPanel
     private let controlPanel: NSPanel
     private var hintPanel: NSPanel?
     private weak var store: CompletionStore?
+    private let settings: CairnSettings
     private var screenObserver: NSObjectProtocol?
     private var launchObserver: NSObjectProtocol?
     private var onboardingObserver: NSObjectProtocol?
     private var startObserver: NSObjectProtocol?
+    private var controlSizeObserver: NSObjectProtocol?
+    private var shortcutObserver: NSObjectProtocol?
+    private var stackingObserver: NSObjectProtocol?
     private var hasFinishedLaunching = false
     /// While onboarding gates the app, the panels stay off screen: an ignored
     /// connect window must look like an app that has not started yet.
     private var surfacesHeld = AgentConnectionCenter.needsOnboardingGate
     private var controlDragStart: NSPoint?
     private var attentionGeneration = 0
+    private var notesShortcut: GlobalShortcut?
 
     private enum PreferenceKey {
         static let presentsNotes = "cairn.presentsNotes"
@@ -445,34 +472,46 @@ final class FloatingQueuePresenter: ObservableObject {
         static let controlIntroduced = "cairn.control.introduced"
     }
 
-    init(store: CompletionStore, languageSettings: LanguageSettings) {
+    init(
+        store: CompletionStore,
+        languageSettings: LanguageSettings,
+        settings: CairnSettings
+    ) {
         let preferences = UserDefaults.standard
         presentsNotes = preferences.object(forKey: PreferenceKey.presentsNotes) == nil
             ? false
             : preferences.bool(forKey: PreferenceKey.presentsNotes)
         self.store = store
+        self.settings = settings
         notesPanel = NSPanel(
             contentRect: NSRect(
                 x: 0,
                 y: 0,
                 width: Cairn.Metrics.notePanelWidth,
-                height: FloatingQueueView.minimumExpandedHeight
+                height: NoteQueue.minimumHeight
             ),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
         controlPanel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: Cairn.Metrics.controlPanel),
+            contentRect: NSRect(
+                origin: .zero,
+                size: Cairn.Metrics.controlPanel.scaled(by: settings.controlSize.scale)
+            ),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
 
-        configurePanels(store: store, languageSettings: languageSettings)
-        store.onQueueChange = { [weak self] count in
+        configurePanels(
+            store: store,
+            languageSettings: languageSettings,
+            settings: settings
+        )
+        store.onQueueChange = { [weak self] _ in
             guard let self, self.hasFinishedLaunching, !self.surfacesHeld else { return }
-            self.syncPanels(itemCount: count)
+            self.syncPanels()
         }
         store.onCompletionReceived = { [weak self] in
             self?.callAttention()
@@ -483,11 +522,12 @@ final class FloatingQueuePresenter: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, let store = self.store else { return }
+                guard let self else { return }
                 self.hasFinishedLaunching = true
                 guard !self.surfacesHeld else { return }
                 self.controlPanel.setFrame(self.initialControlFrame(), display: true)
-                self.syncPanels(itemCount: store.completions.count)
+                self.syncPanels()
+                self.installShortcut()
             }
         }
         screenObserver = NotificationCenter.default.addObserver(
@@ -496,9 +536,9 @@ final class FloatingQueuePresenter: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, let store = self.store else { return }
+                guard let self else { return }
                 self.controlPanel.setFrameOrigin(self.clampedControlOrigin(self.controlPanel.frame.origin))
-                self.syncPanels(itemCount: store.completions.count)
+                self.syncPanels()
             }
         }
         onboardingObserver = NotificationCenter.default.addObserver(
@@ -518,6 +558,69 @@ final class FloatingQueuePresenter: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.beginPresentingSurfaces() }
         }
+        controlSizeObserver = NotificationCenter.default.addObserver(
+            forName: .cairnControlSizeDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let size = notification.object as? CairnControlSize
+            Task { @MainActor [weak self] in
+                guard let size else { return }
+                self?.applyControlSize(size)
+            }
+        }
+        shortcutObserver = NotificationCenter.default.addObserver(
+            forName: .cairnNotesShortcutDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.reinstallShortcut() }
+        }
+        stackingObserver = NotificationCenter.default.addObserver(
+            forName: .cairnNoteStackingDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // Whichever way the switch went, the pile it referred to is
+                // gone: unstacked there is nothing to open, and stacked again
+                // the queue should read as one row per project.
+                self.expandedStackKey = nil
+                self.syncPanels()
+            }
+        }
+    }
+
+    /// A resize keeps the stones centred where they already are: the control is
+    /// something the user placed, and growing it around its own centre is the
+    /// only change that does not also move it.
+    private func applyControlSize(_ size: CairnControlSize) {
+        let panelSize = Cairn.Metrics.controlPanel.scaled(by: size.scale)
+        let current = controlPanel.frame
+        let proposed = NSPoint(
+            x: current.midX - panelSize.width / 2,
+            y: current.midY - panelSize.height / 2
+        )
+        controlPanel.setFrame(
+            NSRect(
+                origin: clampedControlOrigin(proposed, size: panelSize),
+                size: panelSize
+            ),
+            display: true
+        )
+        // Before launch the panel has no place yet — `initialControlFrame` is
+        // still to come, and writing this origin would overwrite the remembered
+        // one with a placeholder.
+        guard hasFinishedLaunching, !surfacesHeld else { return }
+        UserDefaults.standard.set(controlPanel.frame.origin.x, forKey: PreferenceKey.controlX)
+        UserDefaults.standard.set(controlPanel.frame.origin.y, forKey: PreferenceKey.controlY)
+        syncPanels()
+        // The introduction, if it is still standing, was placed beside a control
+        // that just changed shape.
+        if let hintPanel {
+            hintPanel.setFrameOrigin(introductionOrigin(size: hintPanel.frame.size))
+        }
     }
 
     /// The gate has opened: put the control on screen as if the app had just
@@ -527,7 +630,47 @@ final class FloatingQueuePresenter: ObservableObject {
         surfacesHeld = false
         guard hasFinishedLaunching else { return }
         controlPanel.setFrame(initialControlFrame(), display: true)
-        syncPanels(itemCount: store?.completions.count ?? 0)
+        syncPanels()
+        installShortcut()
+    }
+
+    /// The shortcut is claimed only once the app is really running — never
+    /// while onboarding still holds the surfaces back. A key that opens a panel
+    /// the user has not been shown yet is a key that does nothing.
+    private func installShortcut() {
+        guard notesShortcut == nil, hasFinishedLaunching, !surfacesHeld else { return }
+
+        let settings = CairnSettings.shared
+        let shortcut = GlobalShortcut(settings.notesShortcut) { [weak self] in
+            self?.toggleNotesFromShortcut()
+        }
+        let claimed = shortcut.register()
+        // Whether the keys were free is only knowable here, and only
+        // actionable in Settings — where they can be recorded again.
+        settings.recordShortcutRegistration(succeeded: claimed)
+        guard claimed else { return }
+        notesShortcut = shortcut
+    }
+
+    /// A recorded combination replaces the old one outright: the previous keys
+    /// go back to the system first, so Cairn is never listening on two.
+    private func reinstallShortcut() {
+        notesShortcut?.unregister()
+        notesShortcut = nil
+        installShortcut()
+    }
+
+    /// A click on the control is aimed at something the eye has already found.
+    /// The shortcut is pressed blind, from inside another app — so when there
+    /// is nothing to expand it answers the way the control answers a finished
+    /// turn, with a look rather than with silence.
+    private func toggleNotesFromShortcut() {
+        guard hasNotes else {
+            dismissControlIntroduction()
+            callAttention()
+            return
+        }
+        toggleNotes()
     }
 
     var hasNotes: Bool {
@@ -542,8 +685,21 @@ final class FloatingQueuePresenter: ObservableObject {
         dismissControlIntroduction()
         guard let store, !store.completions.isEmpty else { return }
         presentsNotes.toggle()
+        // A queue that is put away and taken out again comes back the way a
+        // queue looks: every project one row. An open stack is a question
+        // being asked right now, not a state worth keeping.
+        if !presentsNotes {
+            expandedStackKey = nil
+        }
         UserDefaults.standard.set(presentsNotes, forKey: PreferenceKey.presentsNotes)
-        syncPanels(itemCount: store.completions.count)
+        syncPanels()
+    }
+
+    /// Open the pile, or put it back. Only one is ever open, so opening a
+    /// second closes the first without anyone having to.
+    func toggleStack(_ key: String) {
+        expandedStackKey = expandedStackKey == key ? nil : key
+        syncPanels()
     }
 
     func updateControlDrag(translation: CGSize) {
@@ -559,7 +715,7 @@ final class FloatingQueuePresenter: ObservableObject {
         )
         controlPanel.setFrameOrigin(clampedControlOrigin(proposed))
         if presentsNotes {
-            positionNotesPanel(itemCount: store?.completions.count ?? 0, animate: false)
+            positionNotesPanel(stacks: currentStacks(), animate: false)
         }
     }
 
@@ -649,7 +805,8 @@ final class FloatingQueuePresenter: ObservableObject {
 
     private func configurePanels(
         store: CompletionStore,
-        languageSettings: LanguageSettings
+        languageSettings: LanguageSettings,
+        settings: CairnSettings
     ) {
         configureBasePanel(notesPanel)
         notesPanel.level = .floating
@@ -657,7 +814,9 @@ final class FloatingQueuePresenter: ObservableObject {
         notesPanel.contentView = NSHostingView(
             rootView: FloatingQueueView(
                 store: store,
-                languageSettings: languageSettings
+                presenter: self,
+                languageSettings: languageSettings,
+                settings: settings
             )
         )
 
@@ -669,7 +828,8 @@ final class FloatingQueuePresenter: ObservableObject {
             rootView: CairnControlView(
                 store: store,
                 presenter: self,
-                languageSettings: languageSettings
+                languageSettings: languageSettings,
+                settings: settings
             ),
             presenter: self
         )
@@ -687,10 +847,25 @@ final class FloatingQueuePresenter: ObservableObject {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
     }
 
-    private func syncPanels(itemCount: Int) {
+    private func currentStacks() -> [NoteStack] {
+        NoteQueue.stacks(
+            for: store?.completions ?? [],
+            stacking: settings.stacksNotes
+        )
+    }
+
+    private func syncPanels() {
         controlPanel.orderFrontRegardless()
 
-        if itemCount == 0 {
+        let stacks = currentStacks()
+        // A pile whose last note was dismissed is not open, it is gone — and a
+        // key left pointing at it would swallow the next stack that happens to
+        // gather in the same project.
+        if let expandedStackKey, !stacks.contains(where: { $0.key == expandedStackKey }) {
+            self.expandedStackKey = nil
+        }
+
+        if stacks.isEmpty {
             if presentsNotes {
                 presentsNotes = false
                 UserDefaults.standard.set(false, forKey: PreferenceKey.presentsNotes)
@@ -704,15 +879,17 @@ final class FloatingQueuePresenter: ObservableObject {
             return
         }
 
-        positionNotesPanel(itemCount: itemCount, animate: notesPanel.isVisible)
+        positionNotesPanel(stacks: stacks, animate: notesPanel.isVisible)
         notesPanel.orderFrontRegardless()
         controlPanel.orderFrontRegardless()
     }
 
-    private func positionNotesPanel(itemCount: Int, animate: Bool) {
-        guard itemCount > 0 else { return }
-        let queuedCount = min(itemCount, FloatingQueueView.maximumQueueSize)
-        let contentHeight = FloatingQueueView.contentHeight(for: queuedCount)
+    private func positionNotesPanel(stacks: [NoteStack], animate: Bool) {
+        guard !stacks.isEmpty else { return }
+        let contentHeight = NoteQueue.contentHeight(
+            for: stacks,
+            expandedKey: expandedStackKey
+        )
         let panelHeight = min(contentHeight, maximumNotesPanelHeight())
         let panelSize = NSSize(width: Cairn.Metrics.notePanelWidth, height: panelHeight)
         let frame = notesPanelFrame(size: panelSize)
@@ -724,12 +901,12 @@ final class FloatingQueuePresenter: ObservableObject {
         let controlFrame = controlPanel.frame
         let screen = NSScreen.screens.first(where: { $0.frame.intersects(controlFrame) }) ?? activeScreen()
         guard let visibleFrame = screen?.visibleFrame else {
-            return FloatingQueueView.maximumExpandedHeight
+            return NoteQueue.maximumHeight
         }
         return min(
-            FloatingQueueView.maximumExpandedHeight,
+            NoteQueue.maximumHeight,
             max(
-                FloatingQueueView.minimumExpandedHeight,
+                NoteQueue.minimumHeight,
                 visibleFrame.height - Cairn.Metrics.screenMargin * 2
             )
         )
@@ -760,8 +937,8 @@ final class FloatingQueuePresenter: ObservableObject {
         )
     }
 
-    private func clampedControlOrigin(_ proposed: NSPoint) -> NSPoint {
-        let size = controlPanel.frame.size
+    private func clampedControlOrigin(_ proposed: NSPoint, size: NSSize? = nil) -> NSPoint {
+        let size = size ?? controlPanel.frame.size
         let proposedFrame = NSRect(origin: proposed, size: size)
         let center = NSPoint(x: proposedFrame.midX, y: proposedFrame.midY)
         let screen = NSScreen.screens.first(where: { $0.frame.contains(center) }) ?? activeScreen()
@@ -808,7 +985,11 @@ private struct CairnControlView: View {
     @ObservedObject var store: CompletionStore
     @ObservedObject var presenter: FloatingQueuePresenter
     @ObservedObject var languageSettings: LanguageSettings
+    @ObservedObject var settings: CairnSettings
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isHovering = false
+
+    private var scale: CGFloat { settings.controlSize.scale }
 
     private var badgeText: String {
         store.completions.count > 99 ? "99+" : "\(store.completions.count)"
@@ -816,7 +997,9 @@ private struct CairnControlView: View {
 
     private var controlShadow: Cairn.Shadow {
         if presenter.isCallingAttention { return .controlAttention }
-        return isHovering ? .controlHover : .controlResting
+        return isHovering
+            ? .controlHover(colorScheme)
+            : .controlResting(colorScheme)
     }
 
     private var controlScale: CGFloat {
@@ -827,22 +1010,24 @@ private struct CairnControlView: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             ZStack {
-                RoundedRectangle(cornerRadius: Cairn.Radius.control, style: .continuous)
+                RoundedRectangle(cornerRadius: Cairn.Radius.control * scale, style: .continuous)
                     .fill(.ultraThinMaterial)
 
-                RoundedRectangle(cornerRadius: Cairn.Radius.control, style: .continuous)
+                RoundedRectangle(cornerRadius: Cairn.Radius.control * scale, style: .continuous)
                     .fill(Cairn.Brand.jade.opacity(0.055))
 
-                CairnMark(isExpanded: presenter.presentsNotes)
+                CairnMark(isExpanded: presenter.presentsNotes, scale: scale)
             }
             .frame(
-                width: Cairn.Metrics.controlBody.width,
-                height: Cairn.Metrics.controlBody.height
+                width: Cairn.Metrics.controlBody.width * scale,
+                height: Cairn.Metrics.controlBody.height * scale
             )
             .overlay {
-                RoundedRectangle(cornerRadius: Cairn.Radius.control, style: .continuous)
+                RoundedRectangle(cornerRadius: Cairn.Radius.control * scale, style: .continuous)
                     .strokeBorder(
-                        isHovering ? Cairn.Stroke.controlHover : Cairn.Stroke.controlResting,
+                        isHovering
+                            ? Cairn.Stroke.controlHover(colorScheme)
+                            : Cairn.Stroke.controlResting(colorScheme),
                         lineWidth: Cairn.Stroke.controlWidth
                     )
             }
@@ -851,12 +1036,12 @@ private struct CairnControlView: View {
 
             if !store.completions.isEmpty {
                 Text(badgeText)
-                    .font(Cairn.Typo.badge)
+                    .font(Cairn.Typo.badge(scale))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, store.completions.count > 9 ? Cairn.Space.xs : 0)
+                    .padding(.horizontal, store.completions.count > 9 ? Cairn.Space.xs * scale : 0)
                     .frame(
-                        minWidth: Cairn.Metrics.badgeSize,
-                        minHeight: Cairn.Metrics.badgeSize
+                        minWidth: Cairn.Metrics.badgeSize * scale,
+                        minHeight: Cairn.Metrics.badgeSize * scale
                     )
                     .background(Cairn.Brand.jade, in: Capsule())
                     .overlay {
@@ -864,12 +1049,12 @@ private struct CairnControlView: View {
                             .strokeBorder(Cairn.Stroke.badge, lineWidth: Cairn.Stroke.width)
                     }
                     .cairnShadow(.badge)
-                    .offset(x: 1, y: -1)
+                    .offset(x: scale, y: -scale)
             }
         }
         .frame(
-            width: Cairn.Metrics.controlPanel.width,
-            height: Cairn.Metrics.controlPanel.height
+            width: Cairn.Metrics.controlPanel.width * scale,
+            height: Cairn.Metrics.controlPanel.height * scale
         )
         .onHover { hovering in
             isHovering = hovering
@@ -959,13 +1144,18 @@ private final class CairnControlHostingView: NSHostingView<CairnControlView> {
         let menu = NSMenu()
         menu.autoenablesItems = false
 
+        let shortcut = CairnSettings.shared.notesShortcut
         let toggle = NSMenuItem(
             title: presenter.presentsNotes
                 ? L10n.string("menu.collapse_notes")
                 : L10n.string("menu.expand_notes"),
             action: #selector(toggleNotesFromMenu),
-            keyEquivalent: ""
+            keyEquivalent: shortcut.keyEquivalent
         )
+        // The menu is where a right click already goes looking; printing the
+        // combination beside the row it duplicates is the only teaching the
+        // shortcut needs — recorded or shipped.
+        toggle.keyEquivalentModifierMask = shortcut.cocoaModifiers
         toggle.target = self
         toggle.isEnabled = presenter.hasNotes
         menu.addItem(toggle)
@@ -979,6 +1169,30 @@ private final class CairnControlHostingView: NSHostingView<CairnControlView> {
         clear.isEnabled = presenter.hasNotes
         menu.addItem(clear)
 
+        menu.addItem(.separator())
+
+        let settings = NSMenuItem(
+            title: L10n.string("menu.settings"),
+            action: #selector(openSettingsFromMenu),
+            keyEquivalent: ""
+        )
+        settings.target = self
+        menu.addItem(settings)
+
+        menu.addItem(.separator())
+
+        // The way out lives here whether or not the menu bar shows one. Cairn
+        // has no Dock icon and no window to close, so the stones on the desktop
+        // are the object a person points at when they want it gone — and
+        // finding nothing there is what sends them to Activity Monitor.
+        let quit = NSMenuItem(
+            title: L10n.string("menu.quit"),
+            action: #selector(quitFromMenu),
+            keyEquivalent: ""
+        )
+        quit.target = self
+        menu.addItem(quit)
+
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
@@ -989,6 +1203,14 @@ private final class CairnControlHostingView: NSHostingView<CairnControlView> {
     @objc private func clearNotesFromMenu() {
         presenter?.clearNotes()
     }
+
+    @objc private func openSettingsFromMenu() {
+        CairnSettings.shared.presentWindow()
+    }
+
+    @objc private func quitFromMenu() {
+        NSApp.terminate(nil)
+    }
 }
 
 /// The Cairn mark: two flat river stones and a lit crown.
@@ -998,8 +1220,11 @@ private final class CairnControlHostingView: NSHostingView<CairnControlView> {
 /// it comes on: the halo blooms, the facet grows and goes near-white, and the
 /// crown sits up by a single point. The stones themselves stay put, so the
 /// mark never reads as a disclosure triangle rotating.
-private struct CairnMark: View {
+struct CairnMark: View {
     let isExpanded: Bool
+    /// The desktop control's size multiplier. The mark's own geometry is
+    /// normalized, so this only sets the box it is fitted into.
+    var scale: CGFloat = 1
     @Environment(\.colorScheme) private var colorScheme
 
     /// The halo's full extent, in mark units. Drawn at full size and scaled
@@ -1035,6 +1260,7 @@ private struct CairnMark: View {
                         width: Cairn.Mark.ground.width * scale,
                         height: Cairn.Mark.ground.height * scale
                     )
+                    .blur(radius: Cairn.Surface.groundShadowBlur * scale)
                     .position(
                         x: offset.x + Cairn.Mark.ground.midX * scale,
                         y: offset.y + Cairn.Mark.ground.midY * scale
@@ -1082,7 +1308,10 @@ private struct CairnMark: View {
                     )
             }
         }
-        .frame(width: 54, height: 59)
+        .frame(
+            width: Cairn.Metrics.controlMark.width * scale,
+            height: Cairn.Metrics.controlMark.height * scale
+        )
     }
 
     /// The bloom behind the crown. It sits under the stone so the silhouette
@@ -1191,7 +1420,7 @@ private struct ControlIntroductionView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: Cairn.Radius.card, style: .continuous)
-                .strokeBorder(Cairn.Stroke.controlResting, lineWidth: Cairn.Stroke.width)
+                .strokeBorder(Cairn.Stroke.controlResting(scheme), lineWidth: Cairn.Stroke.width)
         )
         .cairnShadow(.note(scheme))
         .padding(Cairn.Space.md)
@@ -1199,56 +1428,38 @@ private struct ControlIntroductionView: View {
 }
 
 private struct FloatingQueueView: View {
-    static let maximumQueueSize = 50
-    static let maximumExpandedHeight: CGFloat = 710
-    static let minimumExpandedHeight: CGFloat = 130
-    static let cardHeight = Cairn.Metrics.noteCardHeight
-    static let cardSpacing = Cairn.Metrics.noteCardSpacing
-    static let verticalPadding = Cairn.Space.lg * 2
-    /// Clearing the queue in one gesture is only worth its own control once
-    /// dismissing note by note is real work. At two notes the per-note × is
-    /// faster than reading a new affordance, so the pill starts at three.
-    static let clearAllThreshold = 3
-    /// The pill sits below the scroll view, so it costs the panel its own
-    /// height plus the bottom padding the stack used to own.
-    static let clearAllRowHeight = Cairn.Metrics.noteClearAllHeight + Cairn.Space.lg
-
     @ObservedObject var store: CompletionStore
+    @ObservedObject var presenter: FloatingQueuePresenter
     @ObservedObject var languageSettings: LanguageSettings
+    @ObservedObject var settings: CairnSettings
     @Environment(\.colorScheme) private var colorScheme
     @State private var scrollMetrics = QueueScrollMetrics()
     @State private var indicatorVisible = false
     @State private var indicatorHideTask: Task<Void, Never>?
     @State private var isClearHovering = false
 
-    static func showsClearAll(for itemCount: Int) -> Bool {
-        itemCount >= clearAllThreshold
-    }
-
-    static func contentHeight(for itemCount: Int) -> CGFloat {
-        let count = min(max(0, itemCount), maximumQueueSize)
-        guard count > 0 else { return 0 }
-        return CGFloat(count) * cardHeight
-            + CGFloat(max(0, count - 1)) * cardSpacing
-            + verticalPadding
-            + (showsClearAll(for: count) ? clearAllRowHeight : 0)
-    }
-
-    private var queuedCompletions: ArraySlice<CodexCompletion> {
-        store.completions.prefix(Self.maximumQueueSize)
+    private var stacks: [NoteStack] {
+        NoteQueue.stacks(for: store.completions, stacking: settings.stacksNotes)
     }
 
     var body: some View {
+        let stacks = self.stacks
+
         VStack(spacing: 0) {
             ScrollView(.vertical) {
-                LazyVStack(spacing: Self.cardSpacing) {
-                    ForEach(queuedCompletions, id: \.sessionKey) { completion in
-                        CompletionNote(completion: completion) {
-                            withAnimation(Cairn.Motion.dismiss) {
-                                store.dismiss(sessionKey: completion.sessionKey)
+                LazyVStack(spacing: Cairn.Metrics.noteCardSpacing) {
+                    ForEach(stacks) { stack in
+                        NoteStackRow(
+                            stack: stack,
+                            isExpanded: presenter.expandedStackKey == stack.key,
+                            onToggle: { presenter.toggleStack(stack.key) },
+                            onDismiss: { keys in
+                                withAnimation(Cairn.Motion.dismiss) {
+                                    store.dismiss(sessionKeys: keys)
+                                }
                             }
-                        }
-                        .id(completion.sessionKey)
+                        )
+                        .id(stack.key)
                         .transition(.asymmetric(
                             insertion: .move(edge: .top).combined(with: .opacity),
                             removal: .scale(scale: 0.96).combined(with: .opacity)
@@ -1261,13 +1472,18 @@ private struct FloatingQueueView: View {
             .scrollIndicators(.never)
             .overlay(alignment: .topTrailing) { scrollIndicator }
 
-            if Self.showsClearAll(for: queuedCompletions.count) {
+            if NoteQueue.showsClearAll(for: stacks.count) {
                 clearAllControl
             }
         }
         .frame(width: Cairn.Metrics.notePanelWidth)
         .frame(maxHeight: .infinity, alignment: .top)
+        // The whole panel, not just the cards: a wheel event that lands in the
+        // gap between two notes has to reach this window rather than the app
+        // behind it, and macOS decides that per pixel.
+        .background(Cairn.Surface.eventVeil)
         .animation(Cairn.Motion.enqueue, value: store.completions.map(\.sessionKey))
+        .animation(Cairn.Motion.toggle, value: presenter.expandedStackKey)
     }
 
     /// Below the stack rather than above it: notes arrive at the top, and a
@@ -1458,8 +1674,101 @@ private struct QueueScrollObserver: NSViewRepresentable {
     }
 }
 
+/// One row of the queue: a note, or a pile of them.
+///
+/// Collapsed, the pile is the newest note with the edges of the ones under it
+/// showing below — the same shape macOS uses in Notification Center, for the
+/// same reason: a project that answered five times is one thing that happened,
+/// and it should cost one row until you ask for the rest.
+private struct NoteStackRow: View {
+    let stack: NoteStack
+    let isExpanded: Bool
+    let onToggle: () -> Void
+    let onDismiss: (Set<String>) -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    @ViewBuilder
+    var body: some View {
+        if !stack.isStacked {
+            CompletionNote(completion: stack.newest) {
+                onDismiss([stack.newest.sessionKey])
+            }
+        } else if isExpanded {
+            VStack(spacing: Cairn.Metrics.noteCardSpacing) {
+                CompletionNote(
+                    completion: stack.newest,
+                    stackCount: stack.count,
+                    isStackExpanded: true,
+                    onToggleStack: onToggle
+                ) {
+                    onDismiss([stack.newest.sessionKey])
+                }
+
+                ForEach(stack.older, id: \.sessionKey) { note in
+                    CompletionNote(completion: note) {
+                        onDismiss([note.sessionKey])
+                    }
+                }
+            }
+        } else {
+            ZStack(alignment: .top) {
+                shoulders
+
+                CompletionNote(
+                    completion: stack.newest,
+                    stackCount: stack.count,
+                    isStackExpanded: false,
+                    onToggleStack: onToggle
+                ) {
+                    onDismiss(stack.sessionKeys)
+                }
+            }
+            // The shoulders are offset rather than laid out, so the row has to
+            // be told how tall it really is — by the same arithmetic that sized
+            // the panel around it.
+            .frame(height: NoteQueue.height(of: stack, isExpanded: false), alignment: .top)
+        }
+    }
+
+    /// The edges of the notes underneath: the card's own material and tint,
+    /// drawn in from each side and slid down, so what shows below the top card
+    /// is a curve that belongs to it.
+    private var shoulders: some View {
+        let depth = min(stack.count - 1, NoteQueue.maximumShoulders)
+        let tone = stack.newest.identity.tone
+        let shape = RoundedRectangle(cornerRadius: Cairn.Radius.card, style: .continuous)
+
+        // Deepest first, so the nearer shoulder covers it.
+        return ForEach(Array(stride(from: depth, through: 1, by: -1)), id: \.self) { level in
+            shape
+                .fill(.ultraThinMaterial)
+                .overlay { shape.fill(tone.wash(colorScheme)) }
+                .overlay {
+                    shape.strokeBorder(
+                        Cairn.Stroke.card(colorScheme),
+                        lineWidth: Cairn.Stroke.width
+                    )
+                }
+                .frame(height: Cairn.Metrics.noteCardHeight)
+                .padding(.horizontal, Cairn.Metrics.noteStackInset * CGFloat(level))
+                .offset(y: Cairn.Metrics.noteStackShoulder * CGFloat(level))
+                .cairnShadow(.note(colorScheme))
+        }
+        // Nothing here is a target. The card on top carries every gesture the
+        // pile answers to, and a shape that eats a scroll event is a queue that
+        // stops scrolling.
+        .allowsHitTesting(false)
+    }
+}
+
 private struct CompletionNote: View {
     let completion: CodexCompletion
+    /// How many notes this card stands for. One is a note; more is a pile, and
+    /// the header grows the chip that opens it.
+    var stackCount: Int = 1
+    var isStackExpanded: Bool = false
+    var onToggleStack: (() -> Void)?
     let onDismiss: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -1467,6 +1776,10 @@ private struct CompletionNote: View {
 
     private var agent: Cairn.Agent {
         completion.identity
+    }
+
+    private var isStacked: Bool {
+        stackCount > 1 && onToggleStack != nil
     }
 
     var body: some View {
@@ -1487,6 +1800,10 @@ private struct CompletionNote: View {
 
                 Spacer(minLength: Cairn.Space.md)
 
+                if isStacked {
+                    stackChip
+                }
+
                 CompactRelativeTime(timestamp: completion.timestamp)
 
                 Button(action: onDismiss) {
@@ -1500,7 +1817,11 @@ private struct CompletionNote: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Cairn.Ink.secondary)
-                .help(L10n.string("note.dismiss"))
+                .help(
+                    isStacked && !isStackExpanded
+                        ? L10n.string("note.dismiss_stack")
+                        : L10n.string("note.dismiss")
+                )
             }
 
             if let prompt = completion.promptPreview {
@@ -1558,6 +1879,39 @@ private struct CompletionNote: View {
         .animation(Cairn.Motion.hover, value: isHovering)
         .help(L10n.string("note.follow"))
     }
+
+    /// How many notes are under this one, and the way to them.
+    ///
+    /// Its own control rather than a second meaning for the card: a click on
+    /// the card already goes back to where the turn ran, and that is the
+    /// promise the queue is built on. The chip wears the agent's colour because
+    /// what it counts is that agent's work.
+    private var stackChip: some View {
+        Button {
+            onToggleStack?()
+        } label: {
+            HStack(spacing: Cairn.Space.xxs) {
+                Text("\(stackCount)")
+                    .font(Cairn.Typo.micro.weight(.semibold).monospacedDigit())
+                Image(systemName: isStackExpanded ? "chevron.up" : "chevron.down")
+                    .font(Cairn.Typo.glyph)
+            }
+            .foregroundStyle(agent.tone.label(colorScheme))
+            .padding(.horizontal, Cairn.Space.sm)
+            .frame(height: Cairn.Metrics.dismissTarget)
+            .background(.quaternary, in: Capsule(style: .continuous))
+            .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(stackHelp)
+        .accessibilityLabel(stackHelp)
+    }
+
+    private var stackHelp: String {
+        isStackExpanded
+            ? L10n.string("note.stack.collapse")
+            : L10n.format("note.stack.expand", stackCount)
+    }
 }
 
 private struct CompactRelativeTime: View {
@@ -1578,6 +1932,7 @@ private struct MenuBarQueueView: View {
     @ObservedObject var permissions: PermissionExperience
     @ObservedObject var connections: AgentConnectionCenter
     @ObservedObject var languageSettings: LanguageSettings
+    @ObservedObject var settings: CairnSettings
 
     private var listenerStatusLabel: String {
         switch store.listenerStatus {
@@ -1656,7 +2011,13 @@ private struct MenuBarQueueView: View {
                     action: permissions.presentCenter
                 )
 
-                MenuLanguageRow(settings: languageSettings)
+                // Language used to sit here as a picker. It belongs with the
+                // rest of the switches now: a menu row that opens a menu is one
+                // click deeper than the window that holds every other one.
+                MenuActionRow(
+                    title: L10n.string("menu.settings"),
+                    action: settings.presentWindow
+                )
             }
 
             Divider()
@@ -1742,59 +2103,6 @@ extension MenuActionRow where Trailing == EmptyView {
             isEnabled: isEnabled,
             action: action
         ) { EmptyView() }
-    }
-}
-
-/// The language picker: an ordinary row whose right-hand side is the control.
-///
-/// The list pops over the panel rather than unfolding inside it — a menu that
-/// resizes the window it lives in makes everything below it jump. Keeping the
-/// label plain is also what keeps it aligned: a SwiftUI `Menu` centres and
-/// shrink-wraps whatever it is given, so it gets the value and the chevron and
-/// nothing else.
-private struct MenuLanguageRow: View {
-    @ObservedObject var settings: LanguageSettings
-
-    @State private var isHovering = false
-
-    var body: some View {
-        MenuRowLabel(
-            title: L10n.string("language.menu"),
-            isHighlighted: isHovering
-        ) {
-            Menu {
-                ForEach(AppLanguage.allCases) { language in
-                    Button {
-                        settings.select(language)
-                    } label: {
-                        if language == settings.selection {
-                            Label(language.displayName, systemImage: "checkmark")
-                        } else {
-                            Text(language.displayName)
-                        }
-                    }
-                }
-            } label: {
-                HStack(spacing: Cairn.Space.xs) {
-                    Text(settings.selection.displayName)
-                        .font(Cairn.Typo.meta)
-                    Image(systemName: "chevron.down")
-                        .font(Cairn.Typo.glyph)
-                }
-                .foregroundStyle(Cairn.Ink.tertiary)
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            // A menu button sets its own label in the system control font
-            // unless the control itself is small — the font modifier alone is
-            // not enough to keep the value quieter than the label it follows.
-            .controlSize(.small)
-            .fixedSize()
-        }
-        .onHover { hovering in
-            withAnimation(Cairn.Motion.hover) { isHovering = hovering }
-        }
-        .accessibilityLabel(L10n.string("language.menu"))
     }
 }
 
