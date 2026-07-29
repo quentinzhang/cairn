@@ -60,6 +60,7 @@
   --hermes-rail: #7A4FD6;  --hermes-label: #6541C4;  --hermes-hue: #8059DB;
   --claude-rail: #C2643E;  --claude-label: #9E4C28;  --claude-hue: #D97757;
   --claw-rail:   #1F78BF;  --claw-label:   #1A5F97;  --claw-hue:  #1F78BF;
+  --opencode-rail: #B5721E; --opencode-label: #8A5410; --opencode-hue: #D18529;
 
   --wash-pct: 8%;
   --shadow-note: 0 6px 12px rgba(13, 31, 36, .10);
@@ -86,6 +87,7 @@
     --hermes-rail: #9B78EE;  --hermes-label: #A98CF5;
     --claude-rail: #E08A66;  --claude-label: #F0A585;
     --claw-rail:   #3E96D8;  --claw-label:   #5CACE8;
+    --opencode-rail: #E09A38; --opencode-label: #E8AC55;
 
     /* On a dark ground the crown reads lit again, matching the app icon. */
     --crown-lit:  #DCEFBB;
@@ -112,6 +114,7 @@
   --hermes-rail: #7A4FD6;  --hermes-label: #6541C4;
   --claude-rail: #C2643E;  --claude-label: #9E4C28;
   --claw-rail:   #1F78BF;  --claw-label:   #1A5F97;
+  --opencode-rail: #B5721E; --opencode-label: #8A5410;
   --crown-lit:  #B7DE93;
   --crown-shade:#45895A;
   --beacon-glow-alpha: .16;
@@ -134,6 +137,7 @@
   --hermes-rail: #9B78EE;  --hermes-label: #A98CF5;
   --claude-rail: #E08A66;  --claude-label: #F0A585;
   --claw-rail:   #3E96D8;  --claw-label:   #5CACE8;
+  --opencode-rail: #E09A38; --opencode-label: #E8AC55;
   --crown-lit:  #DCEFBB;
   --crown-shade:#7FBF86;
   --beacon-glow-alpha: .42;
@@ -459,6 +463,7 @@ section {
 .note.hermes { --note-hue: var(--hermes-hue); --note-rail: var(--hermes-rail); --note-label: var(--hermes-label); }
 .note.claude { --note-hue: var(--claude-hue); --note-rail: var(--claude-rail); --note-label: var(--claude-label); }
 .note.claw   { --note-hue: var(--claw-hue);   --note-rail: var(--claw-rail);   --note-label: var(--claw-label); }
+.note.opencode { --note-hue: var(--opencode-hue); --note-rail: var(--opencode-rail); --note-label: var(--opencode-label); }
 
 /* the control tile */
 .control {
@@ -552,6 +557,7 @@ section {
 .agent.hermes { --mark: var(--hermes-rail); }
 .agent.claude { --mark: var(--claude-rail); }
 .agent.claw   { --mark: var(--claw-rail); }
+.agent.opencode { --mark: var(--opencode-rail); }
 
 /* the agent's own mark, tinted by its rail colour — see the sprite in body */
 .mark {
@@ -744,7 +750,7 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
 
     <p class="tagline" data-i18n="tagline">A trail for every task.</p>
 
-    <p class="sub" data-i18n="sub">Juggling Vibe Coding projects and app windows? Cairn is a quiet macOS companion that leaves floating notes when Codex, Claude Code, OpenClaw, or Hermes finishes a task. No notifications. No stolen focus. Open one to jump back to where it ran.</p>
+    <p class="sub" data-i18n="sub">Juggling Vibe Coding projects and app windows? Cairn is a quiet macOS companion that leaves floating notes when Codex, Claude Code, OpenClaw, OpenCode, or Hermes finishes a task. No notifications. No stolen focus. Open one to jump back to where it ran.</p>
 
     <div class="cta-row">
       <a class="cta" href="https://github.com/quentinzhang/cairn/releases/latest" data-i18n="cta">Download for macOS</a>
@@ -836,6 +842,7 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
       <span class="agent hermes"><i class="letter" aria-hidden="true">H</i>Hermes</span>
       <span class="agent claude"><svg class="mark" aria-hidden="true"><use href="#mark-claude"/></svg>Claude Code</span>
       <span class="agent claw"><svg class="mark" aria-hidden="true"><use href="#mark-claw"/></svg>OpenClaw</span>
+      <span class="agent opencode"><i class="letter" aria-hidden="true">O</i>OpenCode</span>
     </div>
   </section>
 
@@ -855,7 +862,7 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
       _sealLang: "ja",
       _title: "Cairn — A trail for every task",
       tagline: "A trail for every task.",
-      sub: "Juggling Vibe Coding projects and app windows? Cairn is a quiet macOS companion that leaves floating notes when Codex, Claude Code, OpenClaw, or Hermes finishes a task. No notifications. No stolen focus. Open one to jump back to where it ran.",
+      sub: "Juggling Vibe Coding projects and app windows? Cairn is a quiet macOS companion that leaves floating notes when Codex, Claude Code, OpenClaw, OpenCode, or Hermes finishes a task. No notifications. No stolen focus. Open one to jump back to where it ran.",
       cta: "Download for macOS",
       ctanote: "macOS 14+ · Apple Silicon · Free and open source · Local only, no telemetry",
       vigcap: "Notes settle beside a small stack of stones. Tap the stack to gather or unfold them; drag it to a quieter corner of your screen.",
@@ -889,7 +896,7 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
       _sealLang: "zh-Hans",
       _title: "Cairn 迹 — 让每一次任务都有迹可循",
       tagline: "让每一次任务都有迹可循。",
-      sub: "Cairn 为同时推进多个 Vibe Coding 项目的人而生，静静住在你的 macOS 桌面上。当 Codex、Claude Code、OpenClaw、Hermes 等 AI 助手交付成果，Cairn 便留下一枚枚悬浮的便签做迹。不发通知，不抢焦点——只在你点开时，才带你原路返回。",
+      sub: "Cairn 为同时推进多个 Vibe Coding 项目的人而生，静静住在你的 macOS 桌面上。当 Codex、Claude Code、OpenClaw、OpenCode、Hermes 等 AI 助手交付成果，Cairn 便留下一枚枚悬浮的便签做迹。不发通知，不抢焦点——只在你点开时，才带你原路返回。",
       cta: "下载 macOS 版",
       ctanote: "macOS 14+ · Apple Silicon · 免费开源 · 只在本地，无遥测",
       vigcap: "便签栖在一小摞石头旁，如轻轻落下的一羽。点一下石堆，便聚拢或散开；拖着它走，安顿在屏幕更安静的一角。",
@@ -923,7 +930,7 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
       _sealLang: "ja",
       _title: "Cairn 跡 — すべてのタスクを、たどれる跡に。",
       tagline: "すべてのタスクを、たどれる跡に。",
-      sub: "Cairn は、複数の Vibe Coding プロジェクトを同時に進める人のために生まれた、macOS のための静かな相棒です。Codex、Claude Code、OpenClaw、Hermes などの AI アシスタントが成果を届けると、Cairn は浮かぶノートを跡として残します。通知もなく、フォーカスも奪いません。開いたときだけ、来た道へ戻してくれます。",
+      sub: "Cairn は、複数の Vibe Coding プロジェクトを同時に進める人のために生まれた、macOS のための静かな相棒です。Codex、Claude Code、OpenClaw、OpenCode、Hermes などの AI アシスタントが成果を届けると、Cairn は浮かぶノートを跡として残します。通知もなく、フォーカスも奪いません。開いたときだけ、来た道へ戻してくれます。",
       cta: "macOS版をダウンロード",
       ctanote: "macOS 14以降 · Apple Silicon · 無料・オープンソース · ローカルのみ、テレメトリなし",
       vigcap: "ノートは小さな石積みのそばに、そっと舞い降りたもののように佇みます。石をクリックすれば集まり、また開く。ドラッグすれば、画面のもっと静かな隅に落ち着きます。",
@@ -991,7 +998,8 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
     { cls: "claude", mark: "claude", agent: "Claude Code", ctx: "Cairn",      pk: "mock1p", rk: "mock1r" },
     { cls: "codex",  mark: "codex",  agent: "Codex",       ctx: "api-server", pk: "mock2p", rk: "mock2r" },
     { cls: "claw",   mark: "claw",   agent: "OpenClaw",    ctx: "Telegram",   pk: "mock3p", rk: "mock3r" },
-    { cls: "hermes", mark: null,     agent: "Hermes",      ctx: "Desktop",    pk: "mock4p", rk: "mock4r" }
+    { cls: "hermes",   mark: null,     agent: "Hermes",   ctx: "Desktop",    pk: "mock4p", rk: "mock4r" },
+    { cls: "opencode", mark: null,     agent: "OpenCode", ctx: "Cairn",      pk: "mock1p", rk: "mock1r" }
   ];
 
   function markup(mock) {

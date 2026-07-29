@@ -50,8 +50,8 @@ app. See [the inbox protocol](docs/inbox-protocol.md).
    [Releases](https://github.com/quentinzhang/cairn/releases/latest) and drag
    **Cairn** into Applications.
 2. Open it. On first launch Cairn finds the coding agents installed on this Mac
-   and lists them — today **Codex**, **Claude Code**, **OpenClaw**, and
-   **Hermes**.
+   and lists them — today **Codex**, **Claude Code**, **OpenClaw**,
+   **OpenCode**, and **Hermes**.
 3. Click **Connect** on each one you use, then **Start Using Cairn**.
 
 That is the whole setup — **no terminal, no scripts, no config files to edit.**
@@ -70,6 +70,7 @@ right after you connect:
 | **Codex** | Run `/hooks` inside Codex once and trust the Cairn handler — Codex will not execute one it does not trust. |
 | **Claude Code** | Nothing. (Interrupted turns and API failures never fire `Stop`, so they leave no note.) |
 | **OpenClaw** | Cairn asks once whether it may read the final message, then restarts the managed Gateway for you. |
+| **OpenCode** | Restart OpenCode if it was already running. |
 | **Hermes** | Restart Hermes if it was already running. |
 
 ## Living with it
@@ -136,7 +137,7 @@ Everything the Connect window does is one script, bundled inside the app:
 ```bash
 cd /Applications/Cairn.app/Contents/Resources
 python3 cairn_connect.py status              # what is detected, what is wired
-python3 cairn_connect.py connect claude      # codex · claude · openclaw · hermes · skills
+python3 cairn_connect.py connect claude      # codex · claude · openclaw · opencode · hermes · skills
 python3 cairn_connect.py disconnect claude
 ```
 

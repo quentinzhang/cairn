@@ -39,7 +39,7 @@ Cairn 不与代理集成——**它只是读一个目录**。任何能写 JSON �
 ## 安装
 
 1. 从 [Releases](https://github.com/quentinzhang/cairn/releases/latest) 下载已公证的 `.dmg`，把 **Cairn** 拖进"应用程序"。
-2. 打开它。首次启动时，Cairn 会检测这台 Mac 上已安装的编码代理并列出来——目前支持 **Codex**、**Claude Code**、**OpenClaw** 和 **Hermes**。
+2. 打开它。首次启动时，Cairn 会检测这台 Mac 上已安装的编码代理并列出来——目前支持 **Codex**、**Claude Code**、**OpenClaw**、**OpenCode** 和 **Hermes**。
 3. 在你在用的每一个上点**连接**，然后点**开始使用 Cairn**。
 
 设置到此为止——**不用终端，不用运行脚本，不用改任何配置文件。** 连接只会向那个代理自己的配置写入一个处理器，其余内容原样保留；**断开**也只移除同一个处理器。标着*需要处理*的那一行，点同一个按钮即是修复。之后随时可以从 Cairn 菜单里的**应用**重新打开这个窗口。
@@ -53,6 +53,7 @@ Cairn 不与代理集成——**它只是读一个目录**。任何能写 JSON �
 | **Codex** | 在 Codex 里运行一次 `/hooks` 并信任 Cairn 的处理器——未受信任的 hook，Codex 不会执行。 |
 | **Claude Code** | 无需额外操作。（被打断的轮次和 API 失败不会触发 `Stop`，因此不产生便签。） |
 | **OpenClaw** | Cairn 会询问一次是否允许读取最终消息，然后自动帮你重启受管 Gateway。 |
+| **OpenCode** | 如果 OpenCode 已在运行，重启它。 |
 | **Hermes** | 如果 Hermes 已在运行，重启它。 |
 
 ## 日常使用
@@ -102,7 +103,7 @@ echo "All 214 tests passed." | python3 /Applications/Cairn.app/Contents/Resource
 ```bash
 cd /Applications/Cairn.app/Contents/Resources
 python3 cairn_connect.py status              # 检测到什么、连上了什么
-python3 cairn_connect.py connect claude      # codex · claude · openclaw · hermes · skills
+python3 cairn_connect.py connect claude      # codex · claude · openclaw · opencode · hermes · skills
 python3 cairn_connect.py disconnect claude
 ```
 

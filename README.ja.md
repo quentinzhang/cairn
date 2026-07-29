@@ -51,7 +51,7 @@ Cairnはエージェントと統合しません——**ディレクトリを読�
    `.dmg` をダウンロードし、**Cairn** をアプリケーションフォルダへドラッグします。
 2. 起動します。初回起動時に、CairnがこのMacにインストール済みのコーディング
    エージェントを検出して一覧にします——現在対応しているのは **Codex**、
-   **Claude Code**、**OpenClaw**、**Hermes** です。
+   **Claude Code**、**OpenClaw**、**OpenCode**、**Hermes** です。
 3. 使っているものそれぞれで**接続**をクリックし、最後に**Cairn を使いはじめる**を
    押します。
 
@@ -71,6 +71,7 @@ macOS 14以降が必要です。
 | **Codex** | Codex内で `/hooks` を一度実行し、Cairnのハンドラーを信頼してください——信頼されていないhookをCodexは実行しません。 |
 | **Claude Code** | 追加の操作は不要です。（中断されたターンやAPI失敗では `Stop` が発火しないため、ノートは生成されません。） |
 | **OpenClaw** | 最終メッセージを読んでよいかを一度だけ確認し、その後は管理対象Gatewayを自動で再起動します。 |
+| **OpenCode** | すでに起動していた場合はOpenCodeを再起動してください。 |
 | **Hermes** | すでに起動していた場合はHermesを再起動してください。 |
 
 ## 日々の使いかた
@@ -138,7 +139,7 @@ echo "All 214 tests passed." | python3 /Applications/Cairn.app/Contents/Resource
 ```bash
 cd /Applications/Cairn.app/Contents/Resources
 python3 cairn_connect.py status              # 何を検出し、何が繋がっているか
-python3 cairn_connect.py connect claude      # codex · claude · openclaw · hermes · skills
+python3 cairn_connect.py connect claude      # codex · claude · openclaw · opencode · hermes · skills
 python3 cairn_connect.py disconnect claude
 ```
 
