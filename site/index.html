@@ -798,7 +798,7 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
       <p class="sub" data-i18n="sub">Juggling Vibe Coding projects and app windows? Cairn is a quiet macOS companion that leaves floating notes when Codex, Claude Code, OpenClaw, OpenCode, or Hermes finishes a task. No notifications. No stolen focus. Open one to jump back to where it ran.</p>
 
       <div class="cta-row">
-        <a class="cta" href="https://github.com/quentinzhang/cairn/releases/latest" data-i18n="cta">Download for macOS</a>
+        <a class="cta" id="cta-download" href="https://github.com/quentinzhang/cairn/releases/latest" data-i18n="cta">Download for macOS</a>
         <span class="cta-note" data-i18n="ctanote">macOS 14+ · Apple Silicon · Free and open source · Local only, no telemetry</span>
       </div>
     </div>
@@ -1183,6 +1183,30 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
     else if (nav.indexOf("ja") !== -1) apply("ja");
     else apply("en");
   }
+})();
+</script>
+
+<script>
+(function () {
+  // Progressive enhancement only: the href above already works with no JS,
+  // slow networks, or a rate-limited API. On success it skips the Release
+  // page and starts the signed, notarized DMG download directly.
+  var cta = document.getElementById("cta-download");
+  if (!cta) return;
+  fetch("https://api.github.com/repos/quentinzhang/cairn/releases/latest", {
+    headers: { Accept: "application/vnd.github+json" }
+  })
+    .then(function (response) {
+      if (!response.ok) throw new Error(String(response.status));
+      return response.json();
+    })
+    .then(function (release) {
+      var asset = (release.assets || []).find(function (a) {
+        return /\.dmg$/i.test(a.name);
+      });
+      if (asset && asset.browser_download_url) cta.href = asset.browser_download_url;
+    })
+    .catch(function () {});
 })();
 </script>
 
