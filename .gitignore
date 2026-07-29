@@ -29,3 +29,7 @@ __pycache__/
 .prd-autopilot
 .claude
 .worktrees
+
+# Local product marketing context
+docs/product-marketing-context.md
+docs/product-marketing-context.zh-CN.md
