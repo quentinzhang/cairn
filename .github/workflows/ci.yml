@@ -59,16 +59,21 @@ jobs:
             install_codex_hook.py \
             install_claude_hook.py \
             install_hermes_plugin.py \
+            install_opencode_plugin.py \
             install_openclaw_plugin.py \
             install_agent_skills.py \
             AppIcon.icns \
+            LICENSE \
+            NOTICE \
+            THIRD_PARTY_NOTICES.md \
             Cairn_Cairn.bundle \
             en.lproj/InfoPlist.strings \
             zh-Hans.lproj/InfoPlist.strings \
             ja.lproj/InfoPlist.strings \
             AgentSkills \
             HermesPlugin \
-            OpenClawPlugin
+            OpenClawPlugin \
+            OpenCodePlugin
           do
             if [ ! -e "$resources/$required" ]; then
               echo "::error::missing from the app bundle: Resources/$required"
@@ -98,7 +103,7 @@ jobs:
           import json
           report = json.load(open("/tmp/connect.json"))
           ids = sorted(r["id"] for r in report["runtimes"])
-          assert ids == ["claude", "codex", "hermes", "openclaw", "skills"], ids
+          assert ids == ["claude", "codex", "hermes", "openclaw", "opencode", "skills"], ids
           print("Bundled connect bridge OK:", ids)
           PY
 
@@ -131,7 +136,7 @@ jobs:
         run: /usr/bin/python3 Tests/protocol_roundtrip.py
 
   node:
-    name: OpenClaw plugin
+    name: Runtime plugins
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
@@ -153,3 +158,16 @@ jobs:
           '
       - name: Test OpenClaw completion filtering
         run: node --test OpenClawPlugin/index.test.js
+      - name: Import and test OpenCode completion filtering
+        run: |
+          node --input-type=module -e '
+            import plugin from "./OpenCodePlugin/index.js";
+            if (plugin.id !== "cairn") {
+              throw new Error("unexpected plugin id: " + plugin.id);
+            }
+            if (typeof plugin.server !== "function") {
+              throw new Error("server() is missing");
+            }
+            console.log("OpenCode plugin loads:", plugin.id);
+          '
+          node --test OpenCodePlugin/index.test.js

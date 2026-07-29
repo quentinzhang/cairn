@@ -26,18 +26,23 @@ Referring to Cairn by name to describe compatibility is always fine — for
 example "publishes notes to Cairn" or "implements the Cairn inbox protocol".
 
 --------------------------------------------------------------------------------
-Third-party integrations
+Third-party products and components
 --------------------------------------------------------------------------------
 
-Cairn integrates with, but does not bundle or redistribute, the following
-independent products. Their names are the trademarks of their respective
-owners and are used here only to describe interoperability:
+Cairn interoperates with, but does not bundle, the following independent
+products. Their names are the trademarks of their respective owners and are
+used here only to describe interoperability:
 
   * Codex and ChatGPT — OpenAI
   * Claude Code and Claude — Anthropic
   * Hermes Agent
   * OpenClaw
+  * OpenCode
   * iTerm2, Visual Studio Code, and Apple Terminal
+
+Cairn redistributes a small set of icon assets under their original
+third-party licenses. The complete copyright and permission notices are in
+THIRD_PARTY_NOTICES.md and are included in the application bundle.
 
 Cairn has no runtime dependency on any third-party Swift, Python, or Node
 package. It uses only the macOS system frameworks, the Python 3 standard

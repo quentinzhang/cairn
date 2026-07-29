@@ -155,3 +155,38 @@ func anUnregisteredSourceRendersGenericallyRatherThanFailing() {
     #expect(Cairn.Agent.identity(for: "openclaw").name == "OpenClaw")
     #expect(Cairn.Agent.identity(for: "opencode").name == "OpenCode")
 }
+
+@Test
+func storageRepairsExistingDirectoryAndFilePermissions() throws {
+    let manager = FileManager.default
+    let root = manager.temporaryDirectory
+        .appendingPathComponent("cairn-permissions-\(UUID().uuidString)", isDirectory: true)
+    let inbox = root.appendingPathComponent("inbox", isDirectory: true)
+    let payload = root.appendingPathComponent("completions.json")
+    defer { try? manager.removeItem(at: root) }
+
+    try manager.createDirectory(
+        at: inbox,
+        withIntermediateDirectories: true,
+        attributes: [.posixPermissions: 0o755]
+    )
+    try Data("[]".utf8).write(to: payload)
+    try manager.setAttributes([.posixPermissions: 0o644], ofItemAtPath: payload.path)
+
+    try CairnStorage.ensurePrivateDirectory(at: root)
+    try CairnStorage.ensurePrivateDirectory(at: inbox)
+    try CairnStorage.ensurePrivateFile(at: payload)
+
+    let rootMode = try #require(
+        manager.attributesOfItem(atPath: root.path)[.posixPermissions] as? NSNumber
+    )
+    let inboxMode = try #require(
+        manager.attributesOfItem(atPath: inbox.path)[.posixPermissions] as? NSNumber
+    )
+    let payloadMode = try #require(
+        manager.attributesOfItem(atPath: payload.path)[.posixPermissions] as? NSNumber
+    )
+    #expect(rootMode.intValue & 0o777 == 0o700)
+    #expect(inboxMode.intValue & 0o777 == 0o700)
+    #expect(payloadMode.intValue & 0o777 == 0o600)
+}

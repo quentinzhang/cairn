@@ -6,6 +6,8 @@ endorsed by or affiliated with their owners.
 
 Every file is a silhouette: the app renders it as a template image, so only the
 alpha channel survives and the fill colours below never reach the screen.
+The complete license texts are distributed in
+[`THIRD_PARTY_NOTICES.md`](../../../../THIRD_PARTY_NOTICES.md).
 
 ## `AgentIcon-codex.svg`, `AgentIcon-claude.svg`
 

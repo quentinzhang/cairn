@@ -19,6 +19,8 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 INBOX = Path.home() / "Library" / "Application Support" / "Cairn" / "inbox"
 RESULT_LIMIT = 50_000
+PRIVATE_DIRECTORY_MODE = 0o700
+PRIVATE_FILE_MODE = 0o600
 
 
 def _build_locator() -> dict[str, Any]:
@@ -152,10 +154,21 @@ def _string(value: Any) -> str:
 def _write_completion(payload: dict[str, Any]) -> None:
     """Atomically publish an event without propagating errors into Hermes."""
     try:
-        INBOX.mkdir(parents=True, exist_ok=True)
+        support = INBOX.parent
+        support.mkdir(parents=True, exist_ok=True, mode=PRIVATE_DIRECTORY_MODE)
+        os.chmod(support, PRIVATE_DIRECTORY_MODE)
+        INBOX.mkdir(exist_ok=True, mode=PRIVATE_DIRECTORY_MODE)
+        os.chmod(INBOX, PRIVATE_DIRECTORY_MODE)
         temporary = INBOX / f".{uuid.uuid4().hex}.pending"
         destination = INBOX / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}-{uuid.uuid4().hex}.json"
-        temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        descriptor = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            PRIVATE_FILE_MODE,
+        )
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(json.dumps(payload, ensure_ascii=False))
+        os.chmod(temporary, PRIVATE_FILE_MODE)
         os.replace(temporary, destination)
     except OSError:
         pass

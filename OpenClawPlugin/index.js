@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 const RESULT_LIMIT = 50_000;
 const inbox = join(homedir(), "Library", "Application Support", "Cairn", "inbox");
@@ -135,13 +135,22 @@ async function gatewayWebURL(sessionKey) {
   }
 }
 
-async function publish(payload) {
-  await mkdir(inbox, { recursive: true });
+export async function publish(payload, targetInbox = inbox) {
+  const support = dirname(targetInbox);
+  await mkdir(support, { recursive: true, mode: 0o700 });
+  await chmod(support, 0o700);
+  await mkdir(targetInbox, { recursive: true, mode: 0o700 });
+  await chmod(targetInbox, 0o700);
   const nonce = randomUUID().replaceAll("-", "");
   const stamp = new Date().toISOString().replaceAll(/[-:.]/g, "");
-  const temporary = join(inbox, `.${nonce}.pending`);
-  const destination = join(inbox, `${stamp}-${nonce}.json`);
-  await writeFile(temporary, JSON.stringify(payload), { encoding: "utf8" });
+  const temporary = join(targetInbox, `.${nonce}.pending`);
+  const destination = join(targetInbox, `${stamp}-${nonce}.json`);
+  await writeFile(temporary, JSON.stringify(payload), {
+    encoding: "utf8",
+    flag: "wx",
+    mode: 0o600,
+  });
+  await chmod(temporary, 0o600);
   await rename(temporary, destination);
 }
 

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { chmod, mkdir, mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
-import { buildGatewayWebURL, shouldPublishCompletion } from "./index.js";
+import { buildGatewayWebURL, publish, shouldPublishCompletion } from "./index.js";
 
 const successfulEvent = {
   success: true,
@@ -117,4 +120,25 @@ test("filters failed or malformed lifecycle events", () => {
     shouldPublishCompletion({ ...successfulEvent, messages: undefined }, {}),
     false,
   );
+});
+
+test("publishes into a user-private inbox with a user-private payload", async () => {
+  const root = await mkdtemp(join(tmpdir(), "cairn-openclaw-"));
+  const inbox = join(root, "Cairn", "inbox");
+  try {
+    await mkdir(inbox, { recursive: true });
+    await chmod(join(root, "Cairn"), 0o755);
+    await chmod(inbox, 0o755);
+    await publish({ result: "first" }, inbox);
+    await publish({ result: "done" }, inbox);
+    const filenames = await readdir(inbox);
+    assert.equal(filenames.length, 2);
+    assert.equal((await stat(join(root, "Cairn"))).mode & 0o777, 0o700);
+    assert.equal((await stat(inbox)).mode & 0o777, 0o700);
+    for (const filename of filenames) {
+      assert.equal((await stat(join(inbox, filename))).mode & 0o777, 0o600);
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

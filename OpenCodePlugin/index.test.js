@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { chmod, mkdir, mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
-import cairnPlugin, { completedAssistant, previousUserMessage, relayIdle } from "./index.js";
+import cairnPlugin, { completedAssistant, previousUserMessage, publish, relayIdle } from "./index.js";
 
 const user = (text) => ({ info: { role: "user" }, parts: [{ type: "text", text }] });
 const assistant = (overrides = {}, parts = [{ type: "text", text: "final answer" }]) => ({
@@ -66,4 +69,25 @@ test("exports the OpenCode PluginModule server entrypoint", async () => {
   const hooks = await cairnPlugin.server({ client: { session: {} } });
   assert.equal(cairnPlugin.id, "cairn");
   assert.equal(typeof hooks.event, "function");
+});
+
+test("publishes into a user-private inbox with a user-private payload", async () => {
+  const root = await mkdtemp(join(tmpdir(), "cairn-opencode-"));
+  const inbox = join(root, "Cairn", "inbox");
+  try {
+    await mkdir(inbox, { recursive: true });
+    await chmod(join(root, "Cairn"), 0o755);
+    await chmod(inbox, 0o755);
+    await publish({ result: "first" }, inbox);
+    await publish({ result: "done" }, inbox);
+    const filenames = await readdir(inbox);
+    assert.equal(filenames.length, 2);
+    assert.equal((await stat(join(root, "Cairn"))).mode & 0o777, 0o700);
+    assert.equal((await stat(inbox)).mode & 0o777, 0o700);
+    for (const filename of filenames) {
+      assert.equal((await stat(join(inbox, filename))).mode & 0o777, 0o600);
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

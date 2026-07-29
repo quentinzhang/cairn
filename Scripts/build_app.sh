@@ -39,6 +39,9 @@ cp -R "$root/HermesPlugin" "$app/Contents/Resources/HermesPlugin"
 cp -R "$root/OpenClawPlugin" "$app/Contents/Resources/OpenClawPlugin"
 cp -R "$root/OpenCodePlugin" "$app/Contents/Resources/OpenCodePlugin"
 cp "$root/Resources/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
+cp "$root/LICENSE" "$app/Contents/Resources/LICENSE"
+cp "$root/NOTICE" "$app/Contents/Resources/NOTICE"
+cp "$root/THIRD_PARTY_NOTICES.md" "$app/Contents/Resources/THIRD_PARTY_NOTICES.md"
 cp "$root/Resources/Info.plist" "$app/Contents/Info.plist"
 [[ -d "$resource_bundle" ]] || {
   echo "Error: Swift package resource bundle is missing: $resource_bundle" >&2

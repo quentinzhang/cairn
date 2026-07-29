@@ -4,7 +4,9 @@
 Claude Code invokes this script from its user-level Stop hook. Current Claude
 Code versions provide ``last_assistant_message`` directly; transcript parsing
 is retained only as a compatibility fallback and for the latest user prompt.
-Every failure is deliberately isolated from Claude Code.
+Turns without an extractable final answer are ignored: a Stop event alone is
+not enough to create a user-facing note. Every failure is deliberately
+isolated from Claude Code.
 """
 
 from __future__ import annotations
@@ -16,6 +18,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from cairn_payload import ensure_private_inbox, write_private_text
 
 
 APP_SUPPORT = Path.home() / "Library" / "Application Support" / "Cairn"
@@ -93,13 +97,13 @@ def title_for(cwd: str) -> str:
 
 
 def publish(payload: dict[str, Any]) -> None:
-    INBOX.mkdir(parents=True, exist_ok=True)
+    ensure_private_inbox(INBOX)
     nonce = uuid.uuid4().hex
     temporary = INBOX / f".{nonce}.pending"
     destination = INBOX / (
         f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}-{nonce}.json"
     )
-    temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    write_private_text(temporary, json.dumps(payload, ensure_ascii=False))
     os.replace(temporary, destination)
 
 
@@ -110,7 +114,9 @@ def main() -> int:
     )
     direct_result = hook.get("last_assistant_message")
     result = direct_result.strip() if isinstance(direct_result, str) else ""
-    result = result or fallback_result or "Claude Code completed this turn."
+    result = result or fallback_result
+    if not result:
+        return 0
     if len(result) > RESULT_LIMIT:
         result = result[:RESULT_LIMIT] + "\n\n… Result shortened by Cairn's Claude Code relay."
 

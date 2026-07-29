@@ -266,6 +266,9 @@ extension CodexCompletion {
         if ["hermes", "openclaw"].contains(normalizedSource), let platform, !platform.isEmpty {
             return platform.capitalized
         }
+        // An empty cwd must not become "/": URL(fileURLWithPath: "") resolves
+        // to file:/// and its lastPathComponent is "/".
+        guard !cwd.isEmpty else { return L10n.string("common.agent") }
         let workspace = URL(fileURLWithPath: cwd).lastPathComponent
         return workspace.isEmpty ? L10n.string("common.agent") : workspace
     }
@@ -278,9 +281,32 @@ extension CodexCompletion {
 }
 
 enum CairnStorage {
+    static let privateDirectoryPermissions = 0o700
+    static let privateFilePermissions = 0o600
+
     static var directory: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Cairn", isDirectory: true)
+    }
+
+    static func ensurePrivateDirectory(at url: URL) throws {
+        let manager = FileManager.default
+        try manager.createDirectory(
+            at: url,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: privateDirectoryPermissions]
+        )
+        try manager.setAttributes(
+            [.posixPermissions: privateDirectoryPermissions],
+            ofItemAtPath: url.path
+        )
+    }
+
+    static func ensurePrivateFile(at url: URL) throws {
+        try FileManager.default.setAttributes(
+            [.posixPermissions: privateFilePermissions],
+            ofItemAtPath: url.path
+        )
     }
 }
 
@@ -297,6 +323,14 @@ final class CompletionStore: ObservableObject {
 
     init() {
         persistenceURL = CairnStorage.directory.appendingPathComponent("completions.json")
+        do {
+            try CairnStorage.ensurePrivateDirectory(at: CairnStorage.directory)
+            if FileManager.default.fileExists(atPath: persistenceURL.path) {
+                try CairnStorage.ensurePrivateFile(at: persistenceURL)
+            }
+        } catch {
+            NSLog("Cairn could not secure its local store: \(error.localizedDescription)")
+        }
         completions = Self.load(from: persistenceURL)
 
         inbox = FileInboxWatcher(directory: CairnStorage.directory.appendingPathComponent("inbox", isDirectory: true))
@@ -348,15 +382,12 @@ final class CompletionStore: ObservableObject {
 
     private func save() {
         do {
-            try FileManager.default.createDirectory(
-                at: CairnStorage.directory,
-                withIntermediateDirectories: true,
-                attributes: [.posixPermissions: 0o700]
-            )
+            try CairnStorage.ensurePrivateDirectory(at: CairnStorage.directory)
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(completions).write(to: persistenceURL, options: .atomic)
+            try CairnStorage.ensurePrivateFile(at: persistenceURL)
         } catch {
             NSLog("Cairn could not persist completions: \(error.localizedDescription)")
         }
@@ -392,11 +423,8 @@ final class FileInboxWatcher: @unchecked Sendable {
 
     func start() {
         do {
-            try FileManager.default.createDirectory(
-                at: directory,
-                withIntermediateDirectories: true,
-                attributes: [.posixPermissions: 0o700]
-            )
+            try CairnStorage.ensurePrivateDirectory(at: directory.deletingLastPathComponent())
+            try CairnStorage.ensurePrivateDirectory(at: directory)
             let timer = DispatchSource.makeTimerSource(queue: queue)
             timer.schedule(deadline: .now(), repeating: .milliseconds(400))
             timer.setEventHandler { [weak self] in self?.scan() }

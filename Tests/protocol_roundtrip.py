@@ -20,6 +20,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -52,6 +53,15 @@ def published(inbox: Path, producer: str) -> list[dict[str, Any]]:
         check(False, f"{producer}: never created the inbox directory")
         return []
 
+    check(
+        stat.S_IMODE(inbox.parent.stat().st_mode) == 0o700,
+        f"{producer}: Cairn support directory is not private to the current user",
+    )
+    check(
+        stat.S_IMODE(inbox.stat().st_mode) == 0o700,
+        f"{producer}: inbox directory is not private to the current user",
+    )
+
     leftovers = list(inbox.glob(".*"))
     check(not leftovers, f"{producer}: left temporary files behind: {leftovers}")
 
@@ -60,6 +70,10 @@ def published(inbox: Path, producer: str) -> list[dict[str, Any]]:
 
     payloads: list[dict[str, Any]] = []
     for path in files:
+        check(
+            stat.S_IMODE(path.stat().st_mode) == 0o600,
+            f"{producer}: published payload is not private to the current user",
+        )
         check(
             bool(FILENAME.match(path.name)),
             f"{producer}: filename is not <stamp>-<nonce>.json: {path.name}",
@@ -187,6 +201,30 @@ def test_cairn_save_updates_one_note() -> None:
         shutil.rmtree(home, ignore_errors=True)
 
 
+def test_cairn_save_distinguishes_same_named_directories() -> None:
+    """§5: readable project names must not merge unrelated full paths."""
+    home, inbox, environment = sandbox()
+    try:
+        first = str(home / "client-a" / "app")
+        second = str(home / "client-b" / "app")
+        run_producer("cairn_save.py", environment, "first", "--cwd", first)
+        run_producer("cairn_save.py", environment, "second", "--cwd", second)
+        payloads = published(inbox, "cairn_save.py (same-named directories)")
+        check(len(payloads) == 2, "cairn_save.py: expected two same-named project notes")
+        if len(payloads) == 2:
+            sessions = {payload["session_id"] for payload in payloads}
+            check(
+                len(sessions) == 2,
+                "cairn_save.py: same-named directories at different paths must not collapse",
+            )
+            check(
+                all(re.fullmatch(r"save:app:[0-9a-f]{12}", session) for session in sessions),
+                "cairn_save.py: default session must retain the leaf and stable path fingerprint",
+            )
+    finally:
+        shutil.rmtree(home, ignore_errors=True)
+
+
 def test_claude_hook() -> None:
     home, inbox, environment = sandbox()
     try:
@@ -240,16 +278,12 @@ def test_claude_hook() -> None:
 
 
 def test_claude_hook_survives_garbage() -> None:
-    """§8.1: no input may make a bridge fail, and none may publish an empty note."""
+    """§8.1: no input may make a bridge fail, and a bare Stop event is not a note."""
     home, inbox, environment = sandbox()
     try:
         for stdin in ("", "not json", "[]", json.dumps({"transcript_path": "/nope"})):
             run_producer("cairn_claude_hook.py", environment, stdin=stdin)
-        for payload in published(inbox, "cairn_claude_hook.py (degraded)"):
-            check(
-                bool(payload["result"].strip()),
-                "cairn_claude_hook.py: published an empty result",
-            )
+        published_nothing(inbox, "cairn_claude_hook.py (missing result)")
     finally:
         shutil.rmtree(home, ignore_errors=True)
 
@@ -453,6 +487,7 @@ def main() -> int:
         test_validator_rejects_what_cairn_rejects,
         test_cairn_save,
         test_cairn_save_updates_one_note,
+        test_cairn_save_distinguishes_same_named_directories,
         test_claude_hook,
         test_claude_hook_survives_garbage,
         test_codex_hook,

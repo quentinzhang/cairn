@@ -10,9 +10,9 @@ broken is that notes stop arriving. This is the tool that tells them why.
     python3 Scripts/cairn_doctor.py --probe    # also publish a real test note
     python3 Scripts/cairn_doctor.py --json     # machine-readable
 
-Output is deliberately safe to paste into a bug report: it contains no note
-bodies, no prompts, and no absolute paths outside this checkout — the home
-directory is always shown as `~`.
+Output contains no note bodies or prompts, and the home directory is always
+shown as `~`. Operational App and checkout paths remain because they are part
+of the diagnosis; review them before pasting the report into a public issue.
 
 Exit code is 0 when nothing is broken, 1 when a check FAILs.
 """
@@ -32,7 +32,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from cairn_payload import payload_path
+from cairn_payload import ensure_private_inbox, payload_path, write_private_text
 
 HOME = Path.home()
 # The checkout root when run from a checkout; Contents/ when run from inside
@@ -47,6 +47,7 @@ STORE = SUPPORT / "completions.json"
 CODEX_HOOKS = HOME / ".codex" / "hooks.json"
 CLAUDE_SETTINGS = HOME / ".claude" / "settings.json"
 HERMES_PLUGIN = HOME / ".hermes" / "plugins" / "cairn"
+OPENCODE_PLUGIN = HOME / ".config" / "opencode" / "plugins" / "cairn.js"
 OPENCLAW_CONFIG = Path(
     os.environ.get("OPENCLAW_CONFIG_PATH", HOME / ".openclaw" / "openclaw.json")
 ).expanduser()
@@ -729,6 +730,60 @@ def check_openclaw(report: Report) -> None:
             )
 
 
+def check_opencode(report: Report) -> None:
+    report.section("OpenCode")
+
+    if not (HOME / ".config" / "opencode").is_dir() and run(
+        ["/usr/bin/which", "opencode"]
+    )[0] != 0:
+        report.add(INFO, "OpenCode is not installed — skipped")
+        return
+
+    source = payload_path("OpenCodePlugin") / "index.js"
+    if not OPENCODE_PLUGIN.exists() and not OPENCODE_PLUGIN.is_symlink():
+        report.add(
+            WARN,
+            "Cairn's OpenCode plugin is not installed",
+            f"{tilde(OPENCODE_PLUGIN)} does not exist.",
+            f"python3 {tilde(SCRIPTS / 'install_opencode_plugin.py')} install",
+        )
+        return
+
+    if not OPENCODE_PLUGIN.is_symlink():
+        report.add(
+            WARN,
+            "OpenCode's Cairn plugin slot is a real file",
+            f"{tilde(OPENCODE_PLUGIN)} is not a Cairn-managed symlink. The installer\n"
+            "will not replace a file that may belong to you.",
+            f"Move it aside, then run: python3 {tilde(SCRIPTS / 'install_opencode_plugin.py')} install",
+        )
+        return
+
+    try:
+        target = OPENCODE_PLUGIN.resolve(strict=True)
+    except OSError:
+        report.add(
+            FAIL,
+            "OpenCode plugin is a broken symlink",
+            f"{tilde(OPENCODE_PLUGIN)} → {os.readlink(OPENCODE_PLUGIN)}\n"
+            "OpenCode cannot load it. This is what a moved checkout looks like.",
+            f"python3 {tilde(SCRIPTS / 'install_opencode_plugin.py')} install",
+        )
+        return
+
+    if target == source.resolve():
+        report.add(OK, f"Plugin linked: {tilde(OPENCODE_PLUGIN)} → {tilde(source)}")
+    elif in_app_bundle(target):
+        report.add(INFO, f"Plugin linked into the installed app bundle: {tilde(target)}")
+    else:
+        report.add(
+            WARN,
+            "OpenCode plugin points somewhere else",
+            f"linked:    {tilde(target)}\nthis repo: {tilde(source)}\n"
+            "Turns are published by that copy, so edits here have no effect.",
+        )
+
+
 def check_skills(report: Report) -> None:
     report.section("Deliberate saves (cairn-save skill)")
 
@@ -781,9 +836,9 @@ def probe(report: Report) -> None:
 
     destination = INBOX / f"{stamp.strftime('%Y%m%dT%H%M%S%fZ')}-{nonce}.json"
     try:
-        INBOX.mkdir(parents=True, exist_ok=True)
+        ensure_private_inbox(INBOX)
         temporary = INBOX / f".{nonce}.pending"
-        temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        write_private_text(temporary, json.dumps(payload, ensure_ascii=False))
         os.replace(temporary, destination)
     except OSError as error:
         report.add(
@@ -841,6 +896,7 @@ def main() -> int:
     check_claude_code(report)
     check_hermes(report)
     check_openclaw(report)
+    check_opencode(report)
     check_skills(report)
     if arguments.probe:
         probe(report)

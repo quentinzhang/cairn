@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from cairn_payload import ensure_private_inbox, write_private_text
+
 
 APP_SUPPORT = Path.home() / "Library" / "Application Support" / "Cairn"
 INBOX = APP_SUPPORT / "inbox"
@@ -136,10 +138,10 @@ def main() -> int:
     if locator:
         payload["locator"] = locator
     try:
-        INBOX.mkdir(parents=True, exist_ok=True)
+        ensure_private_inbox(INBOX)
         temporary = INBOX / f".{uuid.uuid4().hex}.pending"
         destination = INBOX / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}-{uuid.uuid4().hex}.json"
-        temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        write_private_text(temporary, json.dumps(payload, ensure_ascii=False))
         os.replace(temporary, destination)  # The app only observes fully written JSON files.
     except OSError:
         pass  # A completion hook must not make Codex fail when Cairn is closed.

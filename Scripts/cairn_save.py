@@ -7,10 +7,11 @@ counterpart — an agent (or a human) saves a conclusion worth keeping:
     cairn_save.py --source claude-code --prompt "寻迹功能" "结论正文……"
     echo "结论正文" | cairn_save.py --source codex
 
-By default every save from the same directory updates one note per source
-(session "save:<dir>"), so repeated saves stay tidy; pass --new for a
-distinct note. Text comes from the argument or stdin. A locator is captured
-so the saved note can trail back to the window it was saved from.
+By default every save from the same directory updates one note per source.
+The readable directory name is paired with a stable full-path fingerprint, so
+same-named projects remain distinct; pass --new for a distinct note. Text comes
+from the argument or stdin. A locator is captured so the saved note can trail
+back to the window it was saved from.
 
 Exit code is always 0 with a message on stderr for failures: saving a note
 must never break an agent's run.
@@ -19,6 +20,7 @@ must never break an agent's run.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -26,6 +28,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from cairn_payload import ensure_private_inbox, write_private_text
 
 INBOX = Path.home() / "Library" / "Application Support" / "Cairn" / "inbox"
 RESULT_LIMIT = 50_000
@@ -52,6 +56,14 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def default_session_id(cwd: str) -> str:
+    """Return a readable, stable id that distinguishes same-named directories."""
+    normalized = os.path.normcase(os.path.abspath(os.path.expanduser(cwd)))
+    leaf = Path(normalized).name or "notes"
+    fingerprint = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
+    return f"save:{leaf}:{fingerprint}"
+
+
 def main() -> int:
     args = parse_args()
 
@@ -65,7 +77,7 @@ def main() -> int:
 
     cwd = args.cwd or os.getcwd()
     leaf = Path(cwd).name or "notes"
-    session = args.session or (uuid.uuid4().hex if args.new else f"save:{leaf}")
+    session = args.session or (uuid.uuid4().hex if args.new else default_session_id(cwd))
     turn = uuid.uuid4().hex
     source = args.source.strip().lower() or "note"
 
@@ -89,13 +101,13 @@ def main() -> int:
         payload["locator"] = locator
 
     try:
-        INBOX.mkdir(parents=True, exist_ok=True)
+        ensure_private_inbox(INBOX)
         nonce = uuid.uuid4().hex
         temporary = INBOX / f".{nonce}.pending"
         destination = INBOX / (
             f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}-{nonce}.json"
         )
-        temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        write_private_text(temporary, json.dumps(payload, ensure_ascii=False))
         os.replace(temporary, destination)
         print(f"Saved to Cairn: {leaf} ({source})")
     except OSError as error:

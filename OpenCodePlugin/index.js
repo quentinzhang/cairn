@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const RESULT_LIMIT = 50_000;
 const INBOX = join(homedir(), "Library", "Application Support", "Cairn", "inbox");
@@ -92,12 +92,21 @@ export function buildLocator(environment = process.env, pid = process.pid) {
 }
 
 export async function publish(payload, inbox = INBOX) {
-  await mkdir(inbox, { recursive: true });
+  const support = dirname(inbox);
+  await mkdir(support, { recursive: true, mode: 0o700 });
+  await chmod(support, 0o700);
+  await mkdir(inbox, { recursive: true, mode: 0o700 });
+  await chmod(inbox, 0o700);
   const nonce = randomUUID().replaceAll("-", "");
   const stamp = new Date().toISOString().replaceAll(/[-:.]/g, "");
   const temporary = join(inbox, `.${nonce}.pending`);
   const destination = join(inbox, `${stamp}-${nonce}.json`);
-  await writeFile(temporary, JSON.stringify(payload), "utf8");
+  await writeFile(temporary, JSON.stringify(payload), {
+    encoding: "utf8",
+    flag: "wx",
+    mode: 0o600,
+  });
+  await chmod(temporary, 0o600);
   await rename(temporary, destination);
 }
 
