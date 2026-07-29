@@ -284,7 +284,7 @@ These are non-negotiable, and every bundled bridge follows them:
    is a local, unencrypted, plaintext queue on the user's disk; treat everything
    you put in it as something the user will see and might screenshot.
 6. **No network.** A producer publishes to the local filesystem. Nothing in this
-   protocol involves a server, an account, or telemetry.
+   protocol involves a server or an account.
 
 ## 9. Minimal producers
 

@@ -40,7 +40,7 @@ note settles beside a small stack of three river stones on your desktop.
 - **Follows the trail back.** Click a note and Cairn returns you to where the
   turn ran — the exact Terminal/iTerm2 tab, the app window, or the Codex
   conversation itself.
-- **Yours alone.** No account, no server, no telemetry. Everything stays on
+- **Yours alone.** No account, no server. Everything stays on
   this Mac.
 
 ### Install

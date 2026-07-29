@@ -79,7 +79,7 @@ GET https://api.github.com/repos/quentinzhang/cairn/releases/latest
 It sends no identifiers beyond what any HTTPS request implies and carries no
 note data. Automatic failures stay silent; a user-initiated failure produces
 only an in-app retry state. Nothing else in Cairn opens a network connection.
-There is no account, no server, no telemetry, no analytics, no crash reporting.
+There is no account, no server, no analytics, no crash reporting.
 
 ## macOS privacy grants
 
