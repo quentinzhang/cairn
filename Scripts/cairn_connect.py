@@ -146,6 +146,10 @@ def enriched_path() -> str:
         # misses it exactly when a GUI app is the one asking.
         HOME / "Library" / "pnpm",
         HOME / ".local" / "bin",
+        # OpenCode's managed installer places its executable here. This is
+        # normally added from an interactive shell profile, which Finder apps
+        # do not inherit.
+        HOME / ".opencode" / "bin",
         HOME / ".bun" / "bin",
         HOME / ".volta" / "bin",
         HOME / ".deno" / "bin",
