@@ -140,16 +140,24 @@ export async function relayIdle(client, sessionID, publishCompletion = publish) 
   return true;
 }
 
-/** OpenCode plugin entrypoint. The SDK client is supplied by its plugin API. */
-export default async function cairnOpenCodePlugin({ client }) {
-  return {
-    event({ event }) {
-      if (event?.type !== "session.idle" || !event.properties?.sessionID) return;
-      // OpenCode currently drops the promise returned by an event handler.
-      // Own it here so SDK or filesystem failures can never become unhandled.
-      void relayIdle(client, event.properties.sessionID).catch((error) => {
-        console.warn(`Cairn could not publish an OpenCode completion: ${error instanceof Error ? error.message : String(error)}`);
-      });
-    },
-  };
-}
+/**
+ * OpenCode 1.18 loads local modules as PluginModule objects, rather than
+ * invoking their default export as a plugin function. Keeping `server` here
+ * is therefore essential: exporting the function directly makes the host run
+ * it as a lifecycle hook without PluginInput, leaving `client` undefined.
+ */
+export default {
+  id: "cairn",
+  async server({ client }) {
+    return {
+      event({ event }) {
+        if (event?.type !== "session.idle" || !event.properties?.sessionID) return;
+        // OpenCode currently drops the promise returned by an event handler.
+        // Own it here so SDK or filesystem failures can never become unhandled.
+        void relayIdle(client, event.properties.sessionID).catch((error) => {
+          console.warn(`Cairn could not publish an OpenCode completion: ${error instanceof Error ? error.message : String(error)}`);
+        });
+      },
+    };
+  },
+};

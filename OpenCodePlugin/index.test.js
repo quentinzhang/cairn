@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { completedAssistant, previousUserMessage, relayIdle } from "./index.js";
+import cairnPlugin, { completedAssistant, previousUserMessage, relayIdle } from "./index.js";
 
 const user = (text) => ({ info: { role: "user" }, parts: [{ type: "text", text }] });
 const assistant = (overrides = {}, parts = [{ type: "text", text: "final answer" }]) => ({
@@ -60,4 +60,10 @@ test("keeps a shortened result within the inbox protocol limit", async () => {
   await relayIdle(client, "session", async (payload) => { published = payload; });
   assert.equal(published.result.length, 50_000);
   assert.match(published.result, /Result shortened by Cairn's OpenCode relay\.$/);
+});
+
+test("exports the OpenCode PluginModule server entrypoint", async () => {
+  const hooks = await cairnPlugin.server({ client: { session: {} } });
+  assert.equal(cairnPlugin.id, "cairn");
+  assert.equal(typeof hooks.event, "function");
 });
