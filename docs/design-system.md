@@ -254,7 +254,7 @@ every panel and hairline along with it.
 
 ### Agent tones
 
-Four agents, four hues, plus a fallback for sources Cairn hasn't been taught.
+Five agents, five hues, plus a fallback for sources Cairn hasn't been taught.
 A tone is not one colour — it is one **identity hue** plus the variants that
 measure correctly on a card tinted with that same hue.
 
@@ -274,6 +274,9 @@ reasons worth keeping straight:
   only job this colour has.
 - **Hermes** is purple by choice: Nous Research brands it black and white, so
   there is nothing to match and a free hue to spend.
+- **OpenCode** is moss green by choice. Its previous fallback amber sat too
+  close to Claude Code's clay in a card wash; moss keeps it separate from
+  Claude's orange, OpenClaw's blue, Hermes's purple, and Cairn's jade.
 
 | Agent | Hue | Rail (light / dark) | Label (light / dark) |
 | --- | --- | --- | --- |
@@ -281,6 +284,7 @@ reasons worth keeping straight:
 | Hermes | `#8059DB` | `#7A4FD6` / `#9B78EE` | `#6541C4` / `#A98CF5` |
 | Claude Code | `#D97757` | `#C2643E` / `#E08A66` | `#9E4C28` / `#F0A585` |
 | OpenClaw | `#1F78BF` | `#1F78BF` / `#3E96D8` | `#1A5F97` / `#5CACE8` |
+| OpenCode | `#7E9C3A` | `#657F28` / `#A8C95B` | `#4E651C` / `#BEDC78` |
 | Unknown | `#D18529` | `#B5721E` / `#E09A38` | `#8A5410` / `#E8AC55` |
 
 The card wash is the hue at **10% (light) / 16% (dark)**, so contrast is
@@ -296,6 +300,7 @@ dark, composited with the wash):
 | Hermes | 5.31 | 4.67 | 4.21 | 3.80 |
 | Claude Code | 4.83 | 5.84 | 3.27 | 4.48 |
 | OpenClaw | 5.28 | 5.09 | 3.67 | 3.92 |
+| OpenCode | 5.33 | 7.58 | 3.69 | 6.18 |
 | Unknown | 5.08 | 5.79 | 3.17 | 4.90 |
 
 Labels clear WCAG AA 4.5:1 for body text; rails clear 3:1 for non-text UI. The

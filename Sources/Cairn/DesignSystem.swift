@@ -271,6 +271,20 @@ extension Cairn {
             washDark: 0.16
         )
 
+        /// Moss green. OpenCode has no durable product hue to borrow, so it
+        /// takes the remaining family between Claude's clay and OpenClaw's
+        /// blue. It is deliberately yellow enough to remain distinct from
+        /// Cairn's own jade in peripheral vision.
+        static let openCode = Tone(
+            hue: Color(hex: 0x7E9C3A),
+            railLight: Color(hex: 0x657F28),
+            railDark: Color(hex: 0xA8C95B),
+            labelLight: Color(hex: 0x4E651C),
+            labelDark: Color(hex: 0xBEDC78),
+            washLight: 0.10,
+            washDark: 0.16
+        )
+
         /// Any source Cairn has not been taught yet.
         static let unknown = Tone(
             hue: Color(hex: 0xD18529),
@@ -302,7 +316,7 @@ extension Cairn {
             case "openclaw":
                 Agent(id: source, name: "OpenClaw", tone: .openClaw)
             case "opencode":
-                Agent(id: source, name: "OpenCode", tone: .unknown)
+                Agent(id: source, name: "OpenCode", tone: .openCode)
             default:
                 Agent(id: source, name: source.capitalized, tone: .unknown)
             }
