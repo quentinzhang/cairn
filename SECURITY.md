@@ -37,6 +37,8 @@ else. Specifically:
 - **OpenClaw** — the last assistant and last user message from `agent_end`.
   Newer OpenClaw builds gate this behind `allowConversationAccess`, which the
   installer explains and asks about before enabling.
+- **OpenCode** — the final completed assistant message and the preceding user
+  message from the top-level session when OpenCode reports `session.idle`.
 
 Reasoning traces, tool calls, tool output, file contents, and intermediate
 messages are never copied into a note.
@@ -49,18 +51,18 @@ turn ran. It is paths and identifiers, not content.
 
 ## Where it goes
 
-Two places on your disk, both mode `0700`:
+Cairn stores notes in two places on your disk:
 
 ```
 ~/Library/Application Support/Cairn/inbox/            one JSON file per turn, deleted on read
 ~/Library/Application Support/Cairn/completions.json  the 50 most recent sessions
 ```
 
-Both are **plaintext and unencrypted**, protected by nothing more than file
-permissions and macOS's own protections on your home directory. Treat them as
-you would treat your shell history: anything with local access to your account
-can read them. If your agent output routinely contains secrets, that is a
-reason to be deliberate about installing Cairn.
+Both are **plaintext and unencrypted**, protected by local filesystem access
+controls and macOS's protections on your home directory. Treat them as you
+would treat your shell history: anything with local access to your account can
+read them. If your agent output routinely contains secrets, that is a reason to
+be deliberate about installing Cairn.
 
 Notes are also held in memory by the running app and drawn on screen — a note is
 visible to anyone looking at your display or recording it.
@@ -146,7 +148,7 @@ from a terminal:
 
 ```bash
 cd /Applications/Cairn.app/Contents/Resources   # or Scripts/ in a checkout
-for agent in codex claude openclaw hermes skills; do
+for agent in codex claude openclaw opencode hermes skills; do
   python3 cairn_connect.py disconnect "$agent"
 done
 rm -rf ~/Library/Application\ Support/Cairn

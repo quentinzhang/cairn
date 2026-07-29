@@ -200,9 +200,10 @@ window that takes focus. It reports that something finished; it does not ask
 for anything. The single exception is the arrival pulse, which lasts 900ms and
 then stops. If a design needs the user to respond, it does not belong here.
 
-**可堆叠 — Everything stacks.** Notes are a queue, not a feed. Cards are one
-fixed height so fifty of them are scannable at a glance and the panel height is
-a pure function of the count. Nothing expands in place; nothing reflows.
+**可堆叠 — Everything stacks.** Notes are a queue, not a feed. Cards keep one
+fixed height, while sessions from the same agent and project collapse into one
+stack and expand on demand. The panel derives its height from the visible stack
+rows and open stack, then scrolls at its maximum height.
 
 **会消退 — Everything fades.** A note is a trace, and traces are meant to be
 walked past. Dismissal is one click with no confirmation, the queue caps at 50,
@@ -404,8 +405,9 @@ part of the system, not call-site details:
 | `settingsMarkScale` | 1.15 |
 
 `noteCardHeight` is the one number everything else in the queue is derived
-from: panel height is `count × (height + spacing) + padding`, which is why a
-card must never grow to fit its content.
+from: each visible row is a card, a collapsed stack with shoulders, or an open
+stack of cards. That arithmetic is why a card must never grow to fit its
+content.
 
 `noteStackShoulder` and `noteStackInset` describe a stack: notes from one agent
 working in one project arrive as a single row, with the edges of the ones

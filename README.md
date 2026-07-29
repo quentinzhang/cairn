@@ -18,6 +18,7 @@ Cairn leaves a small note where each one landed — click it to go back.
 [![Website](https://img.shields.io/badge/website-GitHub%20Pages-1A9E8A.svg)](https://quentinzhang.github.io/cairn/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/macOS-14%2B-lightgrey)
+![Architecture](https://img.shields.io/badge/architecture-Apple%20Silicon-lightgrey)
 
 ### [⬇︎ Download for macOS](https://github.com/quentinzhang/cairn/releases/latest)
 
@@ -53,12 +54,12 @@ note settles beside a small stack of three river stones on your desktop.
 3. Click **Connect** on each one you use, then **Start Using Cairn**.
 
 That is the whole setup — **no terminal, no scripts, no config files to edit.**
-Connecting writes exactly one handler into that agent's own config and leaves
-everything else untouched; **Disconnect** removes exactly that handler again. A
-row marked *needs attention* is repaired by the same click. Reopen the window
-any time from **Apps** in Cairn's menu.
+Connecting installs one Cairn integration for that agent and preserves
+unrelated settings; **Disconnect** removes only Cairn's integration. A row
+marked *needs attention* is repaired by the same click. Reopen the window any
+time from **Apps** in Cairn's menu.
 
-Requires macOS 14 or later.
+Requires macOS 14 or later on Apple Silicon.
 
 A few agents need one more step of their own, which Cairn spells out in the row
 right after you connect:
@@ -86,12 +87,15 @@ right after you connect:
 - Cairn receives the final result only — not streaming progress, not tool logs.
 - The 50 most recent sessions are kept locally. No history beyond that, no sync
   between machines.
-- macOS 14+ only.
+- macOS 14+ on Apple Silicon only.
 
 ## Develop from source
 
 All commands below run from the repository checkout. They do not depend on
 scripts inside an installed copy of Cairn.
+
+See the [complete Scripts reference](Scripts/README.md) for every command,
+runtime hook, installer, shared module, and release tool.
 
 ### Build and run
 
@@ -124,8 +128,9 @@ python3 Scripts/cairn_doctor.py
 For every runtime you have installed it names the cause and the fix: a hook
 pointing at something that moved, a plugin linked but not enabled, a malformed
 payload in the inbox, a second copy of the app stealing notes. Add `--probe` to
-trace a test note end to end. The output is safe to paste into an issue — no
-note bodies, no prompts, no paths from outside the checkout.
+trace a test note end to end. The output contains no note bodies or prompts,
+and abbreviates your home directory as `~`; review the operational App and
+checkout paths before pasting it into an issue.
 
 ### Privacy and storage
 
@@ -133,8 +138,8 @@ Each bridge keeps exactly two things from a finished turn — **the final
 assistant message and the most recent user prompt** — and discards the rest. No
 reasoning traces, no tool calls, no file contents.
 
-Notes live in two plaintext files in your home directory, mode `0700` — treat
-them like your shell history:
+Notes are stored as plaintext in your home directory — treat them like your
+shell history:
 
 ```
 ~/Library/Application Support/Cairn/inbox/            one file per turn, deleted on read
@@ -155,7 +160,7 @@ a long build, or another agent runtime can write a producer against
 example is one line:
 
 ```bash
-echo "All 214 tests passed." | python3 Scripts/cairn_save.py \
+echo "Build completed successfully." | python3 Scripts/cairn_save.py \
   --source ci --prompt "nightly build"
 ```
 
@@ -211,7 +216,8 @@ before filing anything.
 
 ## License
 
-Apache-2.0 — see [LICENSE](LICENSE).
+Apache-2.0 — see [LICENSE](LICENSE). Third-party components retain their own
+licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 The code is open. The **name "Cairn", the wordmark 跡, and the stone mark** are
 not licensed with it — see [NOTICE](NOTICE).

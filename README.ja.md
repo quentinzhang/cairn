@@ -18,6 +18,7 @@ Cairn は終わった場所に小さなノートを残します——開けば�
 [![Website](https://img.shields.io/badge/website-GitHub%20Pages-1A9E8A.svg)](https://quentinzhang.github.io/cairn/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/macOS-14%2B-lightgrey)
+![Architecture](https://img.shields.io/badge/architecture-Apple%20Silicon-lightgrey)
 
 ### [⬇︎ macOS版をダウンロード](https://github.com/quentinzhang/cairn/releases/latest)
 
@@ -54,12 +55,12 @@ Cairn は終わった場所に小さなノートを残します——開けば�
    押します。
 
 セットアップはこれだけです——**ターミナルも、スクリプトの実行も、設定ファイルの
-編集も不要です。** 接続は、そのエージェント自身の設定にハンドラーを1つだけ書き込み、
-他はすべてそのまま残します。**切断**は同じハンドラーだけを取り除きます。*確認が
-必要*と表示された行は、同じクリックが修復になります。ウィンドウはCairnのメニューの
-**アプリ**からいつでも開き直せます。
+編集も不要です。** 接続はそのエージェント向けのCairn連携を1つ導入し、無関係な設定を
+保ちます。**切断**はCairnの連携だけを取り除きます。*確認が必要*と表示された行は、
+同じクリックが修復になります。ウィンドウはCairnのメニューの**アプリ**からいつでも
+開き直せます。
 
-macOS 14以降が必要です。
+Apple Silicon搭載MacとmacOS 14以降が必要です。
 
 いくつかのエージェントには、接続後にもう一歩だけ必要なものがあります。Cairnは
 その行に直接それを書きます:
@@ -87,12 +88,15 @@ macOS 14以降が必要です。
 - Cairnが受け取るのは最終結果のみで、ストリーミングの進捗やツールログは受け取りません。
 - ローカルに保持されるのは直近50セッションだけです。それより古い履歴はなく、
   マシン間の同期もありません。
-- macOS 14以降のみ対応します。
+- Apple Silicon搭載MacのmacOS 14以降のみ対応します。
 
 ## ソースから開発する
 
 以下のコマンドはすべてリポジトリのルートから実行します。インストール済みCairn内の
 スクリプトには依存しません。
+
+各コマンド、ランタイムhook、インストーラー、共有モジュール、リリースツールについては、
+[Scriptsリファレンス](Scripts/README.md)を参照してください。
 
 ### ビルドして実行する
 
@@ -124,8 +128,9 @@ python3 Scripts/cairn_doctor.py
 実際にインストールされている各ランタイムについて、原因と直し方を指名します:
 移動した場所を指すhook、リンク済みだが無効なプラグイン、inboxに詰まった不正な
 ペイロード、ノートを奪う2つ目のアプリコピー。`--probe` を付ければテストノートを
-エンドツーエンドで追跡できます。出力はissueにそのまま貼って安全です——ノート本文
-なし、プロンプトなし、checkout外の絶対パスなし。
+エンドツーエンドで追跡できます。出力にノート本文やプロンプトは含まれず、ホーム
+ディレクトリは `~` に短縮されます。issueへ貼る前に、診断用に残るAppとcheckoutの
+パスを確認してください。
 
 ### プライバシーと保存
 
@@ -133,8 +138,8 @@ python3 Scripts/cairn_doctor.py
 と直近のユーザープロンプト**——で、残りはすべて破棄します。推論トレースなし、
 ツール呼び出しなし、ファイル内容なし。
 
-ノートはホームディレクトリ内の2つの平文ファイルにあり、モードは `0700` です——
-シェル履歴と同じように扱ってください:
+ノートはホームディレクトリ内に平文で保存されます——シェル履歴と同じように
+扱ってください:
 
 ```
 ~/Library/Application Support/Cairn/inbox/            ターンごとに1ファイル、読み取り時に削除
@@ -155,7 +160,7 @@ Cairnはエージェントと統合しません——**ディレクトリを読�
 ソースツリーから使う最短版は1行です:
 
 ```bash
-echo "All 214 tests passed." | python3 Scripts/cairn_save.py \
+echo "Build completed successfully." | python3 Scripts/cairn_save.py \
   --source ci --prompt "nightly build"
 ```
 
@@ -211,7 +216,9 @@ CAIRN_NOTARY_PROFILE="cairn-notary" ./Scripts/release.sh --version 0.7.0
 
 ## ライセンス
 
-Apache-2.0 — [LICENSE](LICENSE)を参照してください。
+Apache-2.0 — [LICENSE](LICENSE)を参照してください。第三者コンポーネントには
+それぞれのライセンスが適用されます。詳細は
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)を参照してください。
 
 コードはオープンです。ただし**「Cairn」という名称、跡のワードマーク、ストーン
 マーク**はコードとともにライセンスされません——[NOTICE](NOTICE)を参照してください。

@@ -18,6 +18,7 @@ Cairn 在每一处完成的地方留下一枚便签——点开它，就能原�
 [![Website](https://img.shields.io/badge/website-GitHub%20Pages-1A9E8A.svg)](https://quentinzhang.github.io/cairn/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/macOS-14%2B-lightgrey)
+![Architecture](https://img.shields.io/badge/architecture-Apple%20Silicon-lightgrey)
 
 ### [⬇︎ 下载 macOS 版](https://github.com/quentinzhang/cairn/releases/latest)
 
@@ -42,9 +43,9 @@ Cairn 在每一处完成的地方留下一枚便签——点开它，就能原�
 2. 打开它。首次启动时，Cairn 会检测这台 Mac 上已安装的编码代理并列出来——目前支持 **Codex**、**Claude Code**、**OpenClaw**、**OpenCode** 和 **Hermes**。
 3. 在你在用的每一个上点**连接**，然后点**开始使用 Cairn**。
 
-设置到此为止——**不用终端，不用运行脚本，不用改任何配置文件。** 连接只会向那个代理自己的配置写入一个处理器，其余内容原样保留；**断开**也只移除同一个处理器。标着*需要处理*的那一行，点同一个按钮即是修复。之后随时可以从 Cairn 菜单里的**应用**重新打开这个窗口。
+设置到此为止——**不用终端，不用运行脚本，不用改任何配置文件。** 连接会为该代理安装一项 Cairn 接入，并保留无关设置；**断开**只移除 Cairn 自己的接入。标着*需要处理*的那一行，点同一个按钮即是修复。之后随时可以从 Cairn 菜单里的**应用**重新打开这个窗口。
 
-需要 macOS 14 或更高版本。
+需要搭载 Apple Silicon 的 Mac，并运行 macOS 14 或更高版本。
 
 有几个代理还需要它们自己的一步，Cairn 会在你连接后直接写在那一行里：
 
@@ -67,11 +68,13 @@ Cairn 在每一处完成的地方留下一枚便签——点开它，就能原�
 
 - Cairn 只接收最终结果，不接收流式进度或工具日志。
 - 本地只保留最近 50 个会话；更早的内容不会保留，也不会在不同机器之间同步。
-- 仅支持 macOS 14 或更高版本。
+- 仅支持搭载 Apple Silicon、运行 macOS 14 或更高版本的 Mac。
 
 ## 从源码开发
 
 以下命令都从仓库根目录运行，不依赖已安装 Cairn 内部的脚本。
+
+每个命令、运行时 hook、安装器、共享模块与发布工具的用途，见[完整 Scripts 参考](Scripts/README.md)。
 
 ### 构建并运行
 
@@ -95,13 +98,13 @@ open dist/Cairn.app                           # 运行完整的本地 App
 python3 Scripts/cairn_doctor.py
 ```
 
-对实际安装的每个运行时，它都会指名原因和修法：hook 指向已经移动的位置、插件已链接但未启用、inbox 里卡着畸形负载、第二个应用副本在偷便签。加 `--probe` 可以端到端追踪一条测试便签。它的输出可以安全地贴进 issue——没有便签正文，没有提示词，没有 checkout 之外的绝对路径。
+对实际安装的每个运行时，它都会指名原因和修法：hook 指向已经移动的位置、插件已链接但未启用、inbox 里卡着畸形负载、第二个应用副本在偷便签。加 `--probe` 可以端到端追踪一条测试便签。输出不包含便签正文或提示词，并把主目录缩写为 `~`；贴到 issue 前，仍请检查其中为诊断保留的 App 与 checkout 路径。
 
 ### 隐私与存储实现
 
 每个桥接器从完成的一轮里只保留两样东西——**最终助手消息和最近一条用户提示**——其余全部丢弃。没有推理轨迹，没有工具调用，没有文件内容。
 
-便签以两个明文文件存放在你的主目录，权限 `0700`——像对待 shell 历史一样对待它们：
+便签以明文形式存放在你的主目录——像对待 shell 历史一样对待它们：
 
 ```
 ~/Library/Application Support/Cairn/inbox/            每轮一个文件，读取即删
@@ -115,7 +118,7 @@ python3 Scripts/cairn_doctor.py
 Cairn 不与代理集成——**它只是读一个目录**。CI 流水线、一次长时间构建或另一个代理运行时，都可以对照 [`docs/inbox-protocol.md`](docs/inbox-protocol.md) 编写生产者。源码目录下最短的示例只有一行：
 
 ```bash
-echo "All 214 tests passed." | python3 Scripts/cairn_save.py \
+echo "Build completed successfully." | python3 Scripts/cairn_save.py \
   --source ci --prompt "nightly build"
 ```
 
@@ -153,6 +156,7 @@ CAIRN_NOTARY_PROFILE="cairn-notary" ./Scripts/release.sh --version 0.7.0
 
 ## 许可证
 
-Apache-2.0 — 见 [LICENSE](LICENSE)。
+Apache-2.0 — 见 [LICENSE](LICENSE)。第三方组件保留各自的许可证，详见
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 代码是开放的。**"Cairn" 名称、跡 字标和石头标志**不随代码授权——见 [NOTICE](NOTICE)。

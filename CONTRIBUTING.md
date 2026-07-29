@@ -13,8 +13,9 @@ enabled, a malformed payload wedged in the inbox, an untrusted Codex hook.
 python3 Scripts/cairn_doctor.py
 ```
 
-If you are filing a bug, paste that output. It is designed to be safe to share:
-no note bodies, no prompts, no absolute paths outside the checkout. To also
+If you are filing a bug, include that output after reviewing it. It contains no
+note bodies or prompts and abbreviates your home directory as `~`; operational
+App and checkout paths remain because they are part of the diagnosis. To also
 verify the whole publish path end to end:
 
 ```bash

@@ -3,8 +3,8 @@
 How anything that finishes work tells Cairn about it.
 
 Cairn does not integrate with agents. It reads a directory. Any program that can
-write a file can publish a note: the four bundled bridges (Codex, Claude Code,
-Hermes, OpenClaw) have no privileged path, and a shell one-liner is a
+write a file can publish a note: the five bundled bridges (Codex, Claude Code,
+Hermes, OpenClaw, OpenCode) have no privileged path, and a shell one-liner is a
 first-class producer. This document is the contract between producers and the
 app, and it is the part of Cairn intended to outlive this particular macOS
 implementation.
@@ -21,10 +21,13 @@ a version-1 producer gets a new `version` number, and Cairn will accept both.
 ~/Library/Application Support/Cairn/inbox/
 ```
 
-Created on demand, mode `0700`, by whichever side gets there first — the app on
-launch or a producer on its first publish. A producer must never require the
-app to exist. Notes written while Cairn is closed wait on disk and are picked up
-at next launch; that is the point of using a directory rather than a socket.
+Created on demand by whichever side gets there first — the app on launch or a
+producer on its first publish. A producer must never require the app to exist
+or broaden access to an existing inbox. The Cairn support directory, inbox, and
+payload files must remain accessible only to the current user; bundled
+producers repair that boundary on every publish. Notes written while Cairn is
+closed wait on disk and are picked up at next launch; that is the point of
+using a directory rather than a socket.
 
 One file is one completed unit of work. Files are consumed and deleted by the
 app, so the inbox is a queue, not a log. Cairn's own durable store lives beside
@@ -183,8 +186,11 @@ Two examples from the bundled producers:
 
 - The Stop hooks pass the agent's own session id straight through, so a long
   session updates one note instead of burying the queue.
-- `cairn_save.py` defaults to `save:<directory-leaf>`, so repeated deliberate
-  saves from one project collapse into one note; `--new` forces a fresh uuid.
+- `cairn_save.py` defaults to `save:<directory-leaf>:<path-fingerprint>`.
+  The readable leaf keeps the session recognizable while a stable, shortened
+  SHA-256 fingerprint of the normalized full path prevents same-named projects
+  from collapsing together. Repeated saves from one path still update one
+  note; `--new` forces a fresh uuid.
 
 A note with an `id` Cairn has already seen is dropped entirely, so retrying a
 failed publish is safe.
@@ -286,23 +292,26 @@ Shell:
 
 ```bash
 inbox="$HOME/Library/Application Support/Cairn/inbox"
+support="${inbox%/inbox}"
 nonce=$(uuidgen | tr -d - | tr 'A-Z' 'a-z')
 stamp=$(date -u +%Y%m%dT%H%M%S000000Z)
 mkdir -p "$inbox"
+chmod u=rwx,go= "$support" "$inbox"
 cat > "$inbox/.$nonce.pending" <<JSON
 {"id":"build:$nonce","version":1,"event":"ci.build.completed",
  "session_id":"build:myproject","cwd":"$PWD",
- "title":"Build finished · myproject","result":"All 214 tests passed.",
+ "title":"Build finished · myproject","result":"Build completed successfully.",
  "status":"completed","source":"ci",
  "timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
 JSON
+chmod u=rw,go= "$inbox/.$nonce.pending"
 mv "$inbox/.$nonce.pending" "$inbox/$stamp-$nonce.json"
 ```
 
 Python, using the bundled helper — the shortest correct path for any local tool:
 
 ```bash
-echo "All 214 tests passed." | python3 Scripts/cairn_save.py --source ci --prompt "nightly build"
+echo "Build completed successfully." | python3 Scripts/cairn_save.py --source ci --prompt "nightly build"
 ```
 
 Node: see [`OpenClawPlugin/index.js`](../OpenClawPlugin/index.js) for a complete
