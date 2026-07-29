@@ -20,6 +20,8 @@ __pycache__/
 .Trashes
 
 # Local editor and agent state
+.prd-autopilot/
+.worktrees/
 .claude/settings.local.json
 .vscode/
 .idea/

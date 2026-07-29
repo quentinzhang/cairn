@@ -147,13 +147,20 @@ enum AgentConnectionBridge {
         let process = Process()
     }
 
+    static func pythonArguments(script: URL, arguments: [String]) -> [String] {
+        // A downloaded app's Resources directory is sealed by code signing.
+        // Python's default bytecode cache would add __pycache__ beside these
+        // bundled modules on the first status refresh and invalidate that seal.
+        ["-B", script.path] + arguments
+    }
+
     static func run(_ arguments: [String], timeout: TimeInterval) throws -> Data {
         guard let script = scriptURL() else { throw Failure.scriptMissing }
 
         let box = ProcessBox()
         let process = box.process
         process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-        process.arguments = [script.path] + arguments
+        process.arguments = pythonArguments(script: script, arguments: arguments)
 
         // stdout carries the payload and nothing else — the bridge moves its
         // own diagnostics, and those of every CLI it drives, onto stderr. That
@@ -250,6 +257,7 @@ struct AgentRuntimeIdentity: Sendable {
         AgentRuntimeIdentity(id: "codex", name: "Codex", toneSource: "codex"),
         AgentRuntimeIdentity(id: "claude", name: "Claude Code", toneSource: "claude-code"),
         AgentRuntimeIdentity(id: "openclaw", name: "OpenClaw", toneSource: "openclaw"),
+        AgentRuntimeIdentity(id: "opencode", name: "OpenCode", toneSource: "opencode"),
         AgentRuntimeIdentity(id: "hermes", name: "Hermes", toneSource: "hermes"),
     ]
 

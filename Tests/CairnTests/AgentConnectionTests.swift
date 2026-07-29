@@ -18,13 +18,15 @@ func bridgeReportDecodesEveryState() throws {
            "consent": false, "follow_up": null},
           {"id": "openclaw", "state": "attention", "issue": "disabled", "message": null,
            "consent": true, "follow_up": null},
+          {"id": "opencode", "state": "available", "issue": null, "message": null,
+           "consent": false, "follow_up": null},
           {"id": "hermes", "state": "not_installed", "issue": null, "message": null,
            "consent": false, "follow_up": null}
         ]}
         """
     )
 
-    #expect(runtimes.map(\.id) == ["codex", "claude", "openclaw", "hermes"])
+    #expect(runtimes.map(\.id) == ["codex", "claude", "openclaw", "opencode", "hermes"])
     #expect(runtimes[0].state == .connected)
     #expect(runtimes[0].isConnected)
     #expect(runtimes[0].followUp == "codex_trust")
@@ -32,8 +34,9 @@ func bridgeReportDecodesEveryState() throws {
     #expect(runtimes[2].state == .attention)
     #expect(runtimes[2].issue == "disabled")
     #expect(runtimes[2].consent)
-    #expect(runtimes[3].state == .notInstalled)
-    #expect(!runtimes[3].isConnected)
+    #expect(runtimes[3].state == .available)
+    #expect(runtimes[4].state == .notInstalled)
+    #expect(!runtimes[4].isConnected)
 }
 
 /// A newer bridge beside an older app must stay legible: an unrecognised state
@@ -92,6 +95,7 @@ func everyRuntimeHasAnIdentityAndAnUnknownOneStillRenders() {
     #expect(AgentRuntimeIdentity.identity(for: "codex").name == "Codex")
     #expect(AgentRuntimeIdentity.identity(for: "claude").name == "Claude Code")
     #expect(AgentRuntimeIdentity.identity(for: "openclaw").name == "OpenClaw")
+    #expect(AgentRuntimeIdentity.identity(for: "opencode").name == "OpenCode")
     #expect(AgentRuntimeIdentity.identity(for: "hermes").name == "Hermes")
 
     let unknown = AgentRuntimeIdentity.identity(for: "newthing")
@@ -103,7 +107,7 @@ func everyRuntimeHasAnIdentityAndAnUnknownOneStillRenders() {
 /// agent to connect, so it never becomes a row — and never inflates the count.
 @Test
 func theWindowShowsAgentsAndNothingElse() {
-    #expect(AgentRuntimeIdentity.all.map(\.id) == ["codex", "claude", "openclaw", "hermes"])
+    #expect(AgentRuntimeIdentity.all.map(\.id) == ["codex", "claude", "openclaw", "opencode", "hermes"])
 }
 
 /// Every code the bridge can emit needs a sentence in every language, or the
@@ -159,10 +163,21 @@ func theBridgeAnswersForEveryRuntime() throws {
 
     let runtimes = try AgentConnectionBridge.status()
     #expect(
-        runtimes.map(\.id).sorted() == ["claude", "codex", "hermes", "openclaw", "skills"]
+        runtimes.map(\.id).sorted() == ["claude", "codex", "hermes", "openclaw", "opencode", "skills"]
     )
     // Every agent the window lists has an answer from the bridge.
     for identity in AgentRuntimeIdentity.all {
         #expect(runtimes.contains { $0.id == identity.id }, "no bridge answer for \(identity.id)")
     }
+}
+
+@Test
+func theBridgeDisablesBytecodeWritesInsideTheSignedApp() {
+    let script = URL(
+        fileURLWithPath: "/Applications/Cairn.app/Contents/Resources/cairn_connect.py"
+    )
+    #expect(
+        AgentConnectionBridge.pythonArguments(script: script, arguments: ["status", "--json"])
+            == ["-B", script.path, "status", "--json"]
+    )
 }

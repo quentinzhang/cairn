@@ -149,6 +149,7 @@ Registered sources get a name, an SF Symbol, and a colour:
 | `hermes` | Hermes | violet |
 | `claude-code` | Claude Code | terracotta |
 | `openclaw` | OpenClaw | blue |
+| `opencode` | OpenCode | neutral |
 
 Any other value is accepted and rendered generically: the source string
 capitalized with a neutral tone. Compact note headers use explicit source names
@@ -247,6 +248,12 @@ Notes for producers:
 `Scripts/cairn_locator.py` is a working reference implementation (~100 lines,
 standard library only) and is copied into the app bundle; import it rather than
 reimplementing it if you are writing a Python producer.
+
+OpenCode plugins run in OpenCode's server process. A TUI that starts its own
+server inherits the terminal environment and ancestry, so its locator can
+activate that terminal normally. With `opencode serve` followed by an external
+attach, the same fields identify the server process rather than the attached
+TUI; a click therefore degrades to activating the server host (or Finder).
 
 Precise return needs optional macOS privacy access (Accessibility, per-app
 Automation), granted from **Access** in the menu bar. Without it, a click

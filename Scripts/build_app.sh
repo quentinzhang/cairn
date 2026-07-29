@@ -26,6 +26,7 @@ for script in \
   install_codex_hook.py \
   install_claude_hook.py \
   install_hermes_plugin.py \
+  install_opencode_plugin.py \
   install_openclaw_plugin.py \
   install_agent_skills.py
 do
@@ -33,9 +34,10 @@ do
 done
 /bin/rm -rf "$app/Contents/Resources/AgentSkills"
 cp -R "$root/AgentSkills" "$app/Contents/Resources/AgentSkills"
-/bin/rm -rf "$app/Contents/Resources/HermesPlugin" "$app/Contents/Resources/OpenClawPlugin"
+/bin/rm -rf "$app/Contents/Resources/HermesPlugin" "$app/Contents/Resources/OpenClawPlugin" "$app/Contents/Resources/OpenCodePlugin"
 cp -R "$root/HermesPlugin" "$app/Contents/Resources/HermesPlugin"
 cp -R "$root/OpenClawPlugin" "$app/Contents/Resources/OpenClawPlugin"
+cp -R "$root/OpenCodePlugin" "$app/Contents/Resources/OpenCodePlugin"
 cp "$root/Resources/AppIcon.icns" "$app/Contents/Resources/AppIcon.icns"
 cp "$root/Resources/Info.plist" "$app/Contents/Info.plist"
 [[ -d "$resource_bundle" ]] || {

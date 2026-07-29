@@ -301,6 +301,8 @@ extension Cairn {
                 Agent(id: source, name: "Claude Code", tone: .claudeCode)
             case "openclaw":
                 Agent(id: source, name: "OpenClaw", tone: .openClaw)
+            case "opencode":
+                Agent(id: source, name: "OpenCode", tone: .unknown)
             default:
                 Agent(id: source, name: source.capitalized, tone: .unknown)
             }

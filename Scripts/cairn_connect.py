@@ -47,14 +47,16 @@ import install_agent_skills
 import install_claude_hook
 import install_codex_hook
 import install_hermes_plugin
+import install_opencode_plugin
 import install_openclaw_plugin
 
 HOME = Path.home()
 CODEX_HOME = HOME / ".codex"
 CLAUDE_HOME = HOME / ".claude"
 HERMES_HOME = HOME / ".hermes"
+OPENCODE_HOME = HOME / ".config" / "opencode"
 
-RUNTIMES = ("codex", "claude", "openclaw", "hermes", "skills")
+RUNTIMES = ("codex", "claude", "openclaw", "opencode", "hermes", "skills")
 
 NOT_INSTALLED = "not_installed"
 AVAILABLE = "available"
@@ -365,6 +367,25 @@ def hermes_status() -> Dict[str, Any]:
     return entry("hermes", AVAILABLE)
 
 
+def opencode_status() -> Dict[str, Any]:
+    target = install_opencode_plugin.TARGET
+    source = install_opencode_plugin.SOURCE
+    if not OPENCODE_HOME.is_dir() and not which("opencode"):
+        return entry("opencode", NOT_INSTALLED)
+    if target.is_symlink():
+        try:
+            linked = target.resolve(strict=True)
+        except OSError:
+            return entry("opencode", ATTENTION, BROKEN_LINK, tilde(target))
+        if linked != source.resolve():
+            return entry("opencode", CONNECTED, OTHER_SOURCE, tilde(linked))
+        return entry("opencode", CONNECTED)
+    if target.exists():
+        return entry("opencode", ATTENTION, FOREIGN_PLUGIN, tilde(target))
+    issue = None if which("opencode") else CLI_MISSING
+    return entry("opencode", AVAILABLE, issue)
+
+
 def openclaw_load_paths(config: Dict[str, Any]) -> List[str]:
     """Every directory OpenClaw is configured to load the Cairn plugin from.
 
@@ -470,6 +491,7 @@ STATUS: Dict[str, Callable[[], Dict[str, Any]]] = {
     "codex": codex_status,
     "claude": claude_status,
     "openclaw": openclaw_status,
+    "opencode": opencode_status,
     "hermes": hermes_status,
     "skills": skills_status,
 }
@@ -586,6 +608,26 @@ def disconnect_hermes() -> Dict[str, Any]:
     return result("hermes", True, "\n".join(notes), follow_up=HERMES_RESTART)
 
 
+def connect_opencode() -> Dict[str, Any]:
+    if not install_opencode_plugin.valid_source():
+        return result(
+            "opencode", False,
+            "Missing plugin payload: %s" % tilde(install_opencode_plugin.SOURCE),
+        )
+    install_opencode_plugin.relink()
+    if not which("opencode"):
+        return result(
+            "opencode", True,
+            "Linked %s, but the opencode CLI is not on PATH" % tilde(install_opencode_plugin.TARGET),
+        )
+    return result("opencode", True, "Plugin linked; restart OpenCode to load it")
+
+
+def disconnect_opencode() -> Dict[str, Any]:
+    removed = install_opencode_plugin.unlink()
+    return result("opencode", True, "Plugin unlinked" if removed else "Nothing to remove")
+
+
 def connect_openclaw(allow_conversation_access: bool) -> Dict[str, Any]:
     if not (install_openclaw_plugin.SOURCE / "openclaw.plugin.json").is_file():
         return result(
@@ -652,6 +694,7 @@ CONNECT: Dict[str, Callable[..., Dict[str, Any]]] = {
     "codex": connect_codex,
     "claude": connect_claude,
     "openclaw": connect_openclaw,
+    "opencode": connect_opencode,
     "hermes": connect_hermes,
     "skills": connect_skills,
 }
@@ -660,6 +703,7 @@ DISCONNECT: Dict[str, Callable[[], Dict[str, Any]]] = {
     "codex": disconnect_codex,
     "claude": disconnect_claude,
     "openclaw": disconnect_openclaw,
+    "opencode": disconnect_opencode,
     "hermes": disconnect_hermes,
     "skills": disconnect_skills,
 }
@@ -674,6 +718,7 @@ NAMES = {
     "codex": "Codex",
     "claude": "Claude Code",
     "openclaw": "OpenClaw",
+    "opencode": "OpenCode",
     "hermes": "Hermes",
     "skills": "/cairn-save skill",
 }
