@@ -170,3 +170,14 @@ func theBridgeAnswersForEveryRuntime() throws {
         #expect(runtimes.contains { $0.id == identity.id }, "no bridge answer for \(identity.id)")
     }
 }
+
+@Test
+func theBridgeDisablesBytecodeWritesInsideTheSignedApp() {
+    let script = URL(
+        fileURLWithPath: "/Applications/Cairn.app/Contents/Resources/cairn_connect.py"
+    )
+    #expect(
+        AgentConnectionBridge.pythonArguments(script: script, arguments: ["status", "--json"])
+            == ["-B", script.path, "status", "--json"]
+    )
+}
