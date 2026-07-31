@@ -24,7 +24,8 @@ private func isolatedDefaults() -> UserDefaults {
 
 private let newerRelease = ReleaseDescriptor(
     tag: "v0.7.0",
-    releaseURL: URL(string: "https://github.com/quentinzhang/cairn/releases/tag/v0.7.0")!
+    releaseURL: URL(string: "https://github.com/quentinzhang/cairn/releases/tag/v0.7.0")!,
+    downloadURL: URL(string: "https://github.com/quentinzhang/cairn/releases/download/v0.7.0/Cairn-0.7.0.dmg")!
 )
 
 @Test @MainActor
@@ -39,6 +40,9 @@ func manualCheckFindsAndPersistsAnUpdate() async {
     await checker.checkNow()?.value
 
     #expect(checker.available?.version == "0.7.0")
+    #expect(checker.available?.downloadURL == newerRelease.downloadURL)
+    // The click target is the DMG, exactly as the website's download button.
+    #expect(checker.available?.installURL == newerRelease.downloadURL)
     #expect(checker.status == .idle)
     #expect(defaults.object(forKey: "cairn.update.lastCheckDate") as? Date != nil)
 
@@ -48,6 +52,25 @@ func manualCheckFindsAndPersistsAnUpdate() async {
         currentVersion: { "0.6.3" }
     )
     #expect(relaunched.available == checker.available)
+    // The download URL survives the relaunch, not just the version.
+    #expect(relaunched.available?.downloadURL == newerRelease.downloadURL)
+}
+
+@Test @MainActor
+func aReleaseWithoutADmgFallsBackToItsPage() async {
+    let noDMG = ReleaseDescriptor(
+        tag: "v0.7.0",
+        releaseURL: URL(string: "https://github.com/quentinzhang/cairn/releases/tag/v0.7.0")!
+    )
+    let checker = UpdateChecker(
+        client: StubReleaseClient(release: noDMG),
+        preferences: isolatedDefaults(),
+        currentVersion: { "0.6.3" }
+    )
+    await checker.checkNow()?.value
+
+    #expect(checker.available?.downloadURL == nil)
+    #expect(checker.available?.installURL == noDMG.releaseURL)
 }
 
 @Test @MainActor

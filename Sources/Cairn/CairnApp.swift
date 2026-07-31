@@ -2169,7 +2169,7 @@ private struct VersionRow: View {
 
             if let update {
                 Button {
-                    NSWorkspace.shared.open(update.releaseURL)
+                    NSWorkspace.shared.open(update.installURL)
                 } label: {
                     HStack(spacing: Cairn.Space.xs) {
                         Image(systemName: "arrow.down.circle.fill")

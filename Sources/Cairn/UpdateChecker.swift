@@ -3,11 +3,32 @@ import Foundation
 struct AppUpdate: Codable, Equatable, Sendable {
     let version: String
     let releaseURL: URL
+    /// The signed, notarized DMG to download directly, when the release
+    /// carries one. Absent for older releases or a release without a DMG.
+    let downloadURL: URL?
+
+    init(version: String, releaseURL: URL, downloadURL: URL? = nil) {
+        self.version = version
+        self.releaseURL = releaseURL
+        self.downloadURL = downloadURL
+    }
+
+    /// Where a click should send someone who wants the update: straight to the
+    /// DMG when there is one, exactly as the website's download button does, and
+    /// otherwise the release page as a dependable fallback.
+    var installURL: URL { downloadURL ?? releaseURL }
 }
 
 struct ReleaseDescriptor: Equatable, Sendable {
     let tag: String
     let releaseURL: URL
+    let downloadURL: URL?
+
+    init(tag: String, releaseURL: URL, downloadURL: URL? = nil) {
+        self.tag = tag
+        self.releaseURL = releaseURL
+        self.downloadURL = downloadURL
+    }
 }
 
 protocol ReleaseChecking: Sendable {
@@ -38,7 +59,28 @@ struct GitHubReleaseClient: ReleaseChecking {
               let releaseURL = URL(string: releaseURLString) else {
             throw ReleaseCheckError.invalidResponse
         }
-        return ReleaseDescriptor(tag: tag, releaseURL: releaseURL)
+        return ReleaseDescriptor(
+            tag: tag,
+            releaseURL: releaseURL,
+            downloadURL: Self.dmgDownloadURL(in: payload["assets"])
+        )
+    }
+
+    /// The release's signed DMG, addressed the same way the website's download
+    /// button finds it: the first asset whose name ends in `.dmg`, taken by its
+    /// `browser_download_url`. Nil when a release ships no DMG.
+    private static func dmgDownloadURL(in assets: Any?) -> URL? {
+        guard let assets = assets as? [[String: Any]] else { return nil }
+        for asset in assets {
+            guard let name = asset["name"] as? String,
+                  name.lowercased().hasSuffix(".dmg"),
+                  let urlString = asset["browser_download_url"] as? String,
+                  let url = URL(string: urlString) else {
+                continue
+            }
+            return url
+        }
+        return nil
     }
 }
 
@@ -70,6 +112,7 @@ final class UpdateChecker: ObservableObject {
         static let skippedVersion = "cairn.update.skippedVersion"
         static let availableVersion = "cairn.update.availableVersion"
         static let availableReleaseURL = "cairn.update.availableReleaseURL"
+        static let availableDownloadURL = "cairn.update.availableDownloadURL"
     }
 
     private let client: any ReleaseChecking
@@ -175,10 +218,19 @@ final class UpdateChecker: ObservableObject {
             preferences.removeObject(forKey: PreferenceKey.skippedVersion)
         }
 
-        let update = AppUpdate(version: latestVersion, releaseURL: release.releaseURL)
+        let update = AppUpdate(
+            version: latestVersion,
+            releaseURL: release.releaseURL,
+            downloadURL: release.downloadURL
+        )
         available = update
         preferences.set(update.version, forKey: PreferenceKey.availableVersion)
         preferences.set(update.releaseURL.absoluteString, forKey: PreferenceKey.availableReleaseURL)
+        if let downloadURL = update.downloadURL {
+            preferences.set(downloadURL.absoluteString, forKey: PreferenceKey.availableDownloadURL)
+        } else {
+            preferences.removeObject(forKey: PreferenceKey.availableDownloadURL)
+        }
         status = .idle
     }
 
@@ -186,6 +238,7 @@ final class UpdateChecker: ObservableObject {
         available = nil
         preferences.removeObject(forKey: PreferenceKey.availableVersion)
         preferences.removeObject(forKey: PreferenceKey.availableReleaseURL)
+        preferences.removeObject(forKey: PreferenceKey.availableDownloadURL)
     }
 
     private static func restoredUpdate(
@@ -202,9 +255,12 @@ final class UpdateChecker: ObservableObject {
               preferences.string(forKey: PreferenceKey.skippedVersion) != version else {
             preferences.removeObject(forKey: PreferenceKey.availableVersion)
             preferences.removeObject(forKey: PreferenceKey.availableReleaseURL)
+            preferences.removeObject(forKey: PreferenceKey.availableDownloadURL)
             return nil
         }
-        return AppUpdate(version: version, releaseURL: releaseURL)
+        let downloadURL = preferences.string(forKey: PreferenceKey.availableDownloadURL)
+            .flatMap(URL.init(string:))
+        return AppUpdate(version: version, releaseURL: releaseURL, downloadURL: downloadURL)
     }
 }
 
