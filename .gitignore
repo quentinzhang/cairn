@@ -33,3 +33,6 @@ __pycache__/
 # Local product marketing context
 docs/product-marketing-context.md
 docs/product-marketing-context.zh-CN.md
+
+# Local marketing context
+videos/
