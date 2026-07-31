@@ -1998,14 +1998,6 @@ private struct MenuBarQueueView: View {
                 Divider()
             }
 
-            if let update = updateChecker.available {
-                UpdateAvailableRow(update: update) {
-                    updateChecker.skip(update)
-                }
-
-                Divider()
-            }
-
             // Setup: the three things a person changes once and forgets. The
             // queue's own controls are not here — expanding and clearing act
             // on the notes, so they live on the control that draws them.
@@ -2053,14 +2045,13 @@ private struct MenuBarQueueView: View {
             // Version, then the check it belongs to, then the way out — the
             // shape every menu bar app ends in.
             MenuGroup {
-                // Not a row you can press, so not a MenuActionRow — only the
-                // inset is shared, which is what lines it up with the rest.
-                Text(CairnBuildInfo.displayVersion)
-                    .font(Cairn.Typo.menuRow.monospacedDigit())
-                    .foregroundStyle(Cairn.Ink.tertiary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, Cairn.Space.xl)
-                    .padding(.vertical, Cairn.Space.sm)
+                // The installed version, and — when one is waiting — the newer
+                // one on the same line: a person reads "I am on 0.7.0" and "0.7.1
+                // is out" as one thought, so they belong on one row rather than a
+                // banner that pushes the whole menu down to say it.
+                VersionRow(update: updateChecker.available) { update in
+                    updateChecker.skip(update)
+                }
 
                 UpdateCheckRow(status: updateChecker.status) {
                     updateChecker.checkNow()
@@ -2158,43 +2149,57 @@ private struct MenuRowLabel<Trailing: View>: View {
     }
 }
 
-private struct UpdateAvailableRow: View {
-    let update: AppUpdate
-    let onSkip: () -> Void
+/// The installed version, with the update — when there is one — sitting on the
+/// same row as its natural answer: a jade badge that opens the release, and the
+/// dismiss beside it. The version text stays put whether or not an update is
+/// waiting, so the row never shifts under the pointer.
+private struct VersionRow: View {
+    let update: AppUpdate?
+    let onSkip: (AppUpdate) -> Void
 
     var body: some View {
-        HStack(spacing: Cairn.Space.md) {
-            Image(systemName: "arrow.down.circle.fill")
-                .foregroundStyle(Cairn.Brand.jade)
-
-            VStack(alignment: .leading, spacing: Cairn.Space.xxs) {
-                Text(L10n.string("update.available"))
-                    .font(Cairn.Typo.label)
-                Text(L10n.format("update.version_format", update.version))
-                    .font(Cairn.Typo.meta)
-                    .foregroundStyle(Cairn.Ink.secondary)
-            }
+        HStack(spacing: Cairn.Space.sm) {
+            // Not a row you can press, so not a MenuActionRow — only the inset
+            // is shared, which is what lines it up with the rest.
+            Text(CairnBuildInfo.displayVersion)
+                .font(Cairn.Typo.menuRow.monospacedDigit())
+                .foregroundStyle(Cairn.Ink.tertiary)
 
             Spacer(minLength: Cairn.Space.sm)
 
-            Button(L10n.string("update.view")) {
-                NSWorkspace.shared.open(update.releaseURL)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Cairn.Brand.jade)
-            .font(Cairn.Typo.label)
+            if let update {
+                Button {
+                    NSWorkspace.shared.open(update.releaseURL)
+                } label: {
+                    HStack(spacing: Cairn.Space.xs) {
+                        Image(systemName: "arrow.down.circle.fill")
+                        Text(L10n.format("update.version_format", update.version))
+                    }
+                    .font(Cairn.Typo.label)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Cairn.Brand.jade)
+                .help(L10n.string("update.available"))
+                .accessibilityLabel(
+                    "\(L10n.string("update.available")), "
+                        + L10n.format("update.version_format", update.version)
+                )
 
-            Button(action: onSkip) {
-                Image(systemName: "xmark")
-                    .font(Cairn.Typo.glyph)
-                    .frame(width: 20, height: 20)
+                Button {
+                    onSkip(update)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(Cairn.Typo.glyph)
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Cairn.Ink.tertiary)
+                .help(L10n.string("update.skip"))
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(Cairn.Ink.tertiary)
-            .help(L10n.string("update.skip"))
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Cairn.Space.xl)
-        .padding(.vertical, Cairn.Space.md)
+        .padding(.vertical, Cairn.Space.sm)
     }
 }
 

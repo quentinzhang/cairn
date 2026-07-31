@@ -59,7 +59,6 @@
 
 "update.available" = "Update available";
 "update.version_format" = "Cairn %@";
-"update.view" = "View";
 "update.skip" = "Skip this version";
 "update.check" = "Check for Updates…";
 "update.checking" = "Checking…";

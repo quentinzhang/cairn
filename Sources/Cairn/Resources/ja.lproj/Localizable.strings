@@ -59,7 +59,6 @@
 
 "update.available" = "アップデートがあります";
 "update.version_format" = "Cairn %@";
-"update.view" = "表示";
 "update.skip" = "このバージョンをスキップ";
 "update.check" = "アップデートを確認…";
 "update.checking" = "確認中…";

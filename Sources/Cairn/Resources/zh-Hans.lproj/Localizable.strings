@@ -59,7 +59,6 @@
 
 "update.available" = "有新版本";
 "update.version_format" = "Cairn %@";
-"update.view" = "查看";
 "update.skip" = "跳过此版本";
 "update.check" = "检查更新…";
 "update.checking" = "正在检查…";
