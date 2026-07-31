@@ -33,6 +33,31 @@ except Exception:  # the locator is optional; hooks must never break without it
 
 RESULT_LIMIT = 50_000
 
+# Claude Code injects context into the transcript as extra user-role text
+# blocks wrapped in these markers: the file open in the IDE, the current
+# selection, slash-command plumbing, system reminders. They ride alongside — or
+# entirely stand in for — what the user actually typed, so a note that quoted
+# the latest "user" text was quoting "<ide_opened_file>…" instead of the
+# prompt. Drop any block that opens with one of these; what remains is the
+# person's own words.
+_INJECTED_PREFIXES = (
+    "<ide_opened_file>",
+    "<ide_selection>",
+    "<ide_diagnostics>",
+    "<system-reminder>",
+    "<command-name>",
+    "<command-message>",
+    "<command-args>",
+    "<local-command-stdout>",
+    "<local-command-stderr>",
+    "<user-memory-input>",
+)
+
+
+def is_injected_context(text: str) -> bool:
+    stripped = text.lstrip()
+    return any(stripped.startswith(prefix) for prefix in _INJECTED_PREFIXES)
+
 
 def read_hook_input() -> dict[str, Any]:
     try:
@@ -56,11 +81,28 @@ def output_text(content: Any) -> str:
     return "\n".join(pieces).strip()
 
 
-def message_from_record(record: dict[str, Any]) -> tuple[str, str]:
+def user_prompt_text(content: Any) -> str:
+    """The user's own words, with Claude Code's injected context blocks removed."""
+    if isinstance(content, str):
+        return "" if is_injected_context(content) else content.strip()
+    if not isinstance(content, list):
+        return ""
+    pieces: list[str] = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") in {"text", "output_text"} and isinstance(block.get("text"), str):
+            if is_injected_context(block["text"]):
+                continue
+            pieces.append(block["text"])
+    return "\n".join(pieces).strip()
+
+
+def message_from_record(record: dict[str, Any]) -> tuple[str, str, Any]:
     nested = record.get("message")
     message = nested if isinstance(nested, dict) else record
     role = str(message.get("role") or record.get("type") or "")
-    return role, output_text(message.get("content"))
+    return role, output_text(message.get("content")), message.get("content")
 
 
 def transcript_context(transcript_path: str | None) -> tuple[str, str | None]:
@@ -81,11 +123,13 @@ def transcript_context(transcript_path: str | None) -> tuple[str, str | None]:
             continue
         if not isinstance(record, dict):
             continue
-        role, text = message_from_record(record)
+        role, text, content = message_from_record(record)
         if role == "assistant" and text and not fallback_result:
             fallback_result = text
-        elif role == "user" and text and latest_user is None:
-            latest_user = text
+        elif role == "user" and latest_user is None:
+            prompt = user_prompt_text(content)
+            if prompt:
+                latest_user = prompt
         if fallback_result and latest_user:
             break
     return fallback_result, latest_user

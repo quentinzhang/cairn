@@ -365,6 +365,128 @@ func anImportedSessionIsStillTheWayBackWhenItIsAllThereIs() throws {
 }
 
 @Test
+func theConversationOnScreenIsTheOneFocusedLast() throws {
+    let store = try claudeSessionStore([
+        [
+            "sessionId": "local_53f55097-48c1-4827-a172-06c630ce21bc",
+            "cliSessionId": "350d9639-0f7e-4dd4-b56b-2797482b0e28",
+            "lastActivityAt": 1_785_225_005_995,
+            "lastFocusedAt": 1_785_225_100_000,
+        ],
+        [
+            "sessionId": "local_004615af-0b68-4500-bbc3-e67e610ba48b",
+            "cliSessionId": "4dd4a2b5-f58f-4d8c-ba2c-2bdc6c5f5e36",
+            "lastActivityAt": 1_785_223_750_704,
+            // Touched more recently, but read in the app before the other one.
+            "lastFocusedAt": 1_785_224_000_000,
+        ],
+    ])
+    defer { try? FileManager.default.removeItem(at: store) }
+
+    let appLaunched = Date(timeIntervalSince1970: 1_785_220_000)
+    #expect(
+        ClaudeDesktopSessions.frontmostSessionID(in: store, focusedSince: appLaunched)
+            == "local_53f55097-48c1-4827-a172-06c630ce21bc"
+    )
+    // No launch date to check against: the freshest stamp still names it.
+    #expect(
+        ClaudeDesktopSessions.frontmostSessionID(in: store, focusedSince: nil)
+            == "local_53f55097-48c1-4827-a172-06c630ce21bc"
+    )
+}
+
+@Test
+func aFocusFromBeforeTheAppStartedSaysNothingAboutWhatIsOnScreen() throws {
+    // The app was quit reading this conversation and launched again since.
+    // The stamp survived; what it described did not.
+    let store = try claudeSessionStore([
+        [
+            "sessionId": "local_53f55097-48c1-4827-a172-06c630ce21bc",
+            "cliSessionId": "350d9639-0f7e-4dd4-b56b-2797482b0e28",
+            "lastActivityAt": 1_785_225_005_995,
+            "lastFocusedAt": 1_785_225_100_000,
+        ]
+    ])
+    defer { try? FileManager.default.removeItem(at: store) }
+
+    #expect(
+        ClaudeDesktopSessions.frontmostSessionID(
+            in: store,
+            focusedSince: Date(timeIntervalSince1970: 1_785_226_000)
+        ) == nil
+    )
+}
+
+@Test
+func anArchivedOrNeverFocusedConversationIsNotOnScreen() throws {
+    let store = try claudeSessionStore([
+        [
+            "sessionId": "local_53f55097-48c1-4827-a172-06c630ce21bc",
+            "cliSessionId": "350d9639-0f7e-4dd4-b56b-2797482b0e28",
+            "lastActivityAt": 1_785_225_005_995,
+            "lastFocusedAt": 1_785_225_100_000,
+            "isArchived": true,
+        ],
+        [
+            "sessionId": "local_004615af-0b68-4500-bbc3-e67e610ba48b",
+            "cliSessionId": "4dd4a2b5-f58f-4d8c-ba2c-2bdc6c5f5e36",
+            "lastActivityAt": 1_785_223_750_704,
+            "lastFocusedAt": 1_785_224_000_000,
+        ],
+    ])
+    defer { try? FileManager.default.removeItem(at: store) }
+
+    #expect(
+        ClaudeDesktopSessions.frontmostSessionID(in: store, focusedSince: nil)
+            == "local_004615af-0b68-4500-bbc3-e67e610ba48b"
+    )
+
+    // A store where nothing carries a focus stamp — an older app, or one that
+    // has never put a conversation on screen — answers plainly.
+    let unfocused = try claudeSessionStore([
+        [
+            "sessionId": "local_53f55097-48c1-4827-a172-06c630ce21bc",
+            "cliSessionId": "350d9639-0f7e-4dd4-b56b-2797482b0e28",
+            "lastActivityAt": 1_785_225_005_995,
+        ]
+    ])
+    defer { try? FileManager.default.removeItem(at: unfocused) }
+    #expect(ClaudeDesktopSessions.frontmostSessionID(in: unfocused, focusedSince: nil) == nil)
+}
+
+@Test
+func aDesktopSessionIdBecomesTheSameConversationLink() throws {
+    let store = try claudeSessionStore([
+        [
+            "sessionId": "local_53f55097-48c1-4827-a172-06c630ce21bc",
+            "cliSessionId": "350d9639-0f7e-4dd4-b56b-2797482b0e28",
+            "lastActivityAt": 1_785_225_005_995,
+        ]
+    ])
+    defer { try? FileManager.default.removeItem(at: store) }
+
+    let note = completion(
+        source: "claude-code",
+        sessionID: "350d9639-0f7e-4dd4-b56b-2797482b0e28"
+    )
+    let desktopID = try #require(
+        ConversationTrail.claudeDesktopSessionID(for: note, in: store)
+    )
+    #expect(desktopID == "local_53f55097-48c1-4827-a172-06c630ce21bc")
+    #expect(
+        ConversationTrail.claudeDesktopConversationURL(forDesktopSession: desktopID)
+            == ConversationTrail.claudeDesktopConversationURL(for: note, in: store)
+    )
+    // Another agent's note never resolves to a Claude conversation.
+    #expect(
+        ConversationTrail.claudeDesktopSessionID(
+            for: completion(sessionID: "350d9639-0f7e-4dd4-b56b-2797482b0e28"),
+            in: store
+        ) == nil
+    )
+}
+
+@Test
 func browserTabOriginsIncludeBothLoopbackSpellings() throws {
     let url = try #require(URL(string: "http://127.0.0.1:18789/chat?session=abc"))
     #expect(

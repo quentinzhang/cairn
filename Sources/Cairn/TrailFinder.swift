@@ -139,20 +139,40 @@ enum ConversationTrail {
     /// kept working by a redirect the app itself maintains — a steadier thing
     /// to hard-code than the current internal name, which has already changed
     /// once. It costs one window reload, which is the price of not leaving a
-    /// duplicate behind.
+    /// duplicate behind — and a price only paid when the app has to travel:
+    /// a click landing on the conversation already on screen skips the link
+    /// entirely (`TrailFinder.returnToClaudeDesktopConversation`).
     static func claudeDesktopConversationURL(
         for completion: CodexCompletion,
         in store: URL? = nil
     ) -> URL? {
+        guard let desktopID = claudeDesktopSessionID(for: completion, in: store) else {
+            return nil
+        }
+        return claudeDesktopConversationURL(forDesktopSession: desktopID)
+    }
+
+    /// The desktop app's id for this note's conversation, before it is spent on
+    /// a URL — a click that turns out to be going nowhere needs the id itself,
+    /// to ask whether the app is already there.
+    static func claudeDesktopSessionID(
+        for completion: CodexCompletion,
+        in store: URL? = nil
+    ) -> String? {
         guard completion.source?.lowercased() == "claude-code",
-              UUID(uuidString: completion.sessionID) != nil,
-              let desktopID = ClaudeDesktopSessions.sessionID(
-                  forCLISession: completion.sessionID,
-                  in: store
-              ),
-              let encoded = desktopID.addingPercentEncoding(
-                  withAllowedCharacters: .urlPathAllowed
-              ) else {
+              UUID(uuidString: completion.sessionID) != nil else {
+            return nil
+        }
+        return ClaudeDesktopSessions.sessionID(
+            forCLISession: completion.sessionID,
+            in: store
+        )
+    }
+
+    static func claudeDesktopConversationURL(forDesktopSession id: String) -> URL? {
+        guard let encoded = id.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) else {
             return nil
         }
         return URL(string: "claude://claude.ai/claude-code-desktop/\(encoded)")
@@ -200,18 +220,12 @@ enum ClaudeDesktopSessions {
         let importedID = "local_\(cliSessionID)"
 
         var best: (id: String, ownedByTheApp: Bool, activity: Double)?
-        for record in records(in: store ?? defaultStore) {
-            guard let data = try? Data(contentsOf: record),
-                  let fields = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                  fields["cliSessionId"] as? String == cliSessionID,
-                  let id = fields["sessionId"] as? String,
-                  !id.isEmpty else {
-                continue
-            }
+        for record in records(in: store ?? defaultStore)
+        where record.cliSessionID == cliSessionID {
             let candidate = (
-                id: id,
-                ownedByTheApp: id != importedID,
-                activity: (fields["lastActivityAt"] as? Double) ?? 0
+                id: record.sessionID,
+                ownedByTheApp: record.sessionID != importedID,
+                activity: record.lastActivityAt
             )
             guard let winner = best else {
                 best = candidate
@@ -226,9 +240,59 @@ enum ClaudeDesktopSessions {
         return best?.id
     }
 
+    /// The conversation the app has open right now.
+    ///
+    /// The app stamps `lastFocusedAt` on a session the moment it puts that
+    /// conversation on screen, so the freshest stamp in the store names what
+    /// the window is showing. The stamp outlives the app, though — quit while
+    /// reading a conversation and it still describes yesterday — so a caller
+    /// passes the app's launch date, and a focus older than the process that
+    /// would have to honour it counts as no answer at all.
+    static func frontmostSessionID(
+        in store: URL? = nil,
+        focusedSince launch: Date?
+    ) -> String? {
+        var best: (id: String, focused: Double)?
+        for record in records(in: store ?? defaultStore)
+        where record.lastFocusedAt > 0 && !record.isArchived {
+            if let winner = best, winner.focused >= record.lastFocusedAt { continue }
+            best = (record.sessionID, record.lastFocusedAt)
+        }
+        guard let best else { return nil }
+        if let launch, best.focused < launch.timeIntervalSince1970 * 1000 { return nil }
+        return best.id
+    }
+
+    /// One row of the store, reduced to the few fields a trail reads.
+    private struct Record {
+        let sessionID: String
+        let cliSessionID: String
+        let lastActivityAt: Double
+        let lastFocusedAt: Double
+        let isArchived: Bool
+    }
+
+    private static func records(in store: URL) -> [Record] {
+        recordFiles(in: store).compactMap { file in
+            guard let data = try? Data(contentsOf: file),
+                  let fields = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let id = fields["sessionId"] as? String,
+                  !id.isEmpty else {
+                return nil
+            }
+            return Record(
+                sessionID: id,
+                cliSessionID: (fields["cliSessionId"] as? String) ?? "",
+                lastActivityAt: (fields["lastActivityAt"] as? Double) ?? 0,
+                lastFocusedAt: (fields["lastFocusedAt"] as? Double) ?? 0,
+                isArchived: (fields["isArchived"] as? Bool) ?? false
+            )
+        }
+    }
+
     /// The store nests one directory per install and one per account inside
     /// it, so a Mac that has signed into two accounts holds two of them.
-    private static func records(in store: URL) -> [URL] {
+    private static func recordFiles(in store: URL) -> [URL] {
         func children(_ url: URL) -> [URL] {
             (try? FileManager.default.contentsOfDirectory(
                 at: url,
@@ -303,8 +367,7 @@ enum TrailFinder {
         // through to its own host, so an editor turn still returns to the
         // editor.
         if ConversationTrail.wasHostedByClaudeDesktop(locator),
-           let conversation = ConversationTrail.claudeDesktopConversationURL(for: completion),
-           NSWorkspace.shared.open(conversation) {
+           await returnToClaudeDesktopConversation(completion) {
             return
         }
 
@@ -379,8 +442,7 @@ enum TrailFinder {
             // The turn's host is gone — a terminal that has since closed, or a
             // note old enough to predate the locator. If the desktop app holds
             // the conversation anyway, that is still the way back to it.
-            if let conversation = ConversationTrail.claudeDesktopConversationURL(for: completion),
-               NSWorkspace.shared.open(conversation) {
+            if await returnToClaudeDesktopConversation(completion) {
                 return true
             }
             // Nobody holds it. Now `claude://resume?session=<uuid>` is the
@@ -396,12 +458,54 @@ enum TrailFinder {
                 return true
             }
             return await activateOrLaunchApp(
-                named: "Claude",
-                bundleIDs: ["com.anthropic.claudefordesktop"]
+                named: claudeDesktopName,
+                bundleIDs: claudeDesktopBundleIDs
             )
         default:
             return false
         }
+    }
+
+    // MARK: - Claude Desktop
+
+    private static let claudeDesktopName = "Claude"
+    private static let claudeDesktopBundleIDs = ["com.anthropic.claudefordesktop"]
+
+    /// Back to a Claude Code conversation the desktop app already holds.
+    ///
+    /// The deep link is a *navigation*: the app routes to the conversation and
+    /// the window reloads on the way through. When the conversation on screen
+    /// is already this one, that reload is all cost and no travel — a blank
+    /// window, a re-render, a scroll position lost, to arrive where the app
+    /// was already standing. So ask the store what the app is showing, and
+    /// when the answer is this note's conversation, spend the click on
+    /// bringing the window forward and nothing else.
+    ///
+    /// Everything about that check can go quiet — a store Cairn cannot read, a
+    /// stamp older than the running app, an app that is not running at all —
+    /// and every one of those answers "not sure", which is the deep link,
+    /// exactly as before.
+    private static func returnToClaudeDesktopConversation(
+        _ completion: CodexCompletion
+    ) async -> Bool {
+        guard let desktopID = ConversationTrail.claudeDesktopSessionID(for: completion) else {
+            return false
+        }
+
+        if let app = runningApp(named: claudeDesktopName, bundleIDs: claudeDesktopBundleIDs),
+           ClaudeDesktopSessions.frontmostSessionID(focusedSince: app.launchDate) == desktopID {
+            return await activateOrLaunchApp(
+                named: claudeDesktopName,
+                bundleIDs: claudeDesktopBundleIDs
+            )
+        }
+
+        guard let conversation = ConversationTrail.claudeDesktopConversationURL(
+            forDesktopSession: desktopID
+        ) else {
+            return false
+        }
+        return NSWorkspace.shared.open(conversation)
     }
 
     /// Bring the agent's own app forward — launching it when it is closed,
@@ -696,10 +800,28 @@ enum TrailFinder {
                 guard AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &titleRef) == .success,
                       let title = titleRef as? String,
                       title.localizedCaseInsensitiveContains(hint) else { continue }
-                AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+                focusWindow(window, of: element)
                 return
             }
         }
+    }
+
+    /// Bring one window to the front of its app *and* make the app treat it as
+    /// its front window.
+    ///
+    /// `kAXRaiseAction` alone reorders the window server's z-stack but leaves
+    /// the app's own main-window pointer untouched — so the instant the app is
+    /// activated it re-surfaces whatever window it last considered focused,
+    /// undoing the raise. An Electron editor shows this worst: one process can
+    /// hold a window per project (VS Code, Cursor), and a click that raised the
+    /// right one still landed on the last-focused one. Promoting the window to
+    /// `AXMain`/`AXFocused` is what actually tells the app which window is
+    /// front, so the raise survives the activation that follows.
+    private static func focusWindow(_ window: AXUIElement, of app: AXUIElement) {
+        AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, kCFBooleanTrue)
+        AXUIElementSetAttributeValue(window, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, window)
+        AXUIElementPerformAction(window, kAXRaiseAction as CFString)
     }
 
     // MARK: - Browser tab reuse

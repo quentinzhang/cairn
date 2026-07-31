@@ -277,6 +277,68 @@ def test_claude_hook() -> None:
         shutil.rmtree(home, ignore_errors=True)
 
 
+def test_claude_hook_skips_injected_context() -> None:
+    """The note must quote what the user typed, not the IDE context Claude Code
+    injects into the transcript as extra user-role blocks."""
+    home, inbox, environment = sandbox()
+    try:
+        transcript = home / "transcript.jsonl"
+        transcript.write_text(
+            "\n".join(
+                [
+                    # A standalone injected record, as when a file is opened
+                    # mid-session — must be ignored entirely.
+                    json.dumps(
+                        {
+                            "type": "user",
+                            "message": {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": "<ide_opened_file>opened /a/b.txt</ide_opened_file>"}
+                                ],
+                            },
+                        }
+                    ),
+                    # The real prompt, riding in the same record as an injected
+                    # block — only the person's words survive.
+                    json.dumps(
+                        {
+                            "type": "user",
+                            "message": {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": "<ide_opened_file>opened /a/b.txt</ide_opened_file>"},
+                                    {"type": "text", "text": "why is the note wrong?"},
+                                ],
+                            },
+                        }
+                    ),
+                ]
+            ),
+            encoding="utf-8",
+        )
+        run_producer(
+            "cairn_claude_hook.py",
+            environment,
+            stdin=json.dumps(
+                {
+                    "session_id": "abc-123",
+                    "transcript_path": str(transcript),
+                    "cwd": "/tmp/project",
+                    "last_assistant_message": "the reply",
+                }
+            ),
+        )
+        for payload in published(inbox, "cairn_claude_hook.py"):
+            check(
+                payload.get("user_message") == "why is the note wrong?",
+                "cairn_claude_hook.py: must strip injected IDE context from the user message "
+                f"(got {payload.get('user_message')!r})",
+            )
+    finally:
+        shutil.rmtree(home, ignore_errors=True)
+
+
 def test_claude_hook_survives_garbage() -> None:
     """§8.1: no input may make a bridge fail, and a bare Stop event is not a note."""
     home, inbox, environment = sandbox()
@@ -489,6 +551,7 @@ def main() -> int:
         test_cairn_save_updates_one_note,
         test_cairn_save_distinguishes_same_named_directories,
         test_claude_hook,
+        test_claude_hook_skips_injected_context,
         test_claude_hook_survives_garbage,
         test_codex_hook,
         test_codex_hook_ignores_missing_results,
