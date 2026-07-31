@@ -273,6 +273,63 @@ extension CodexCompletion {
         return workspace.isEmpty ? L10n.string("common.agent") : workspace
     }
 
+    /// The surface that held the completed turn. Keep this deliberately small:
+    /// a note needs a quick, stable distinction between a terminal, an editor
+    /// and an app, not a raw process or bundle path from its locator.
+    var executionSurfaceName: String {
+        let hostPaths = (locator?.hostApps ?? []).compactMap(\.path)
+            + [locator?.hostAppPath].compactMap { $0 }
+        let hostAppNames = hostPaths.map {
+            URL(fileURLWithPath: $0).lastPathComponent.lowercased()
+        }
+        if hostAppNames.contains("visual studio code.app") || hostAppNames.contains("code.app") {
+            return "VS Code"
+        }
+        if hostAppNames.contains("cursor.app") {
+            return "Cursor"
+        }
+        if hostAppNames.contains("iterm.app") {
+            return "iTerm"
+        }
+        if hostAppNames.contains("wezterm.app") {
+            return "WezTerm"
+        }
+        if hostAppNames.contains("kitty.app") {
+            return "Kitty"
+        }
+        if hostAppNames.contains("terminal.app") {
+            return "Terminal"
+        }
+
+        let terminal = locator?.termProgram?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+        if terminal.contains("vscode") || terminal.contains("visual studio code") {
+            return "VS Code"
+        }
+        if terminal.contains("iterm") {
+            return "iTerm"
+        }
+        if terminal.contains("wezterm") {
+            return "WezTerm"
+        }
+        if terminal.contains("kitty") {
+            return "Kitty"
+        }
+        if terminal.contains("terminal") {
+            return "Terminal"
+        }
+
+        switch platform?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "cli", "terminal":
+            return "Terminal"
+        case "vscode", "visual studio code", "code":
+            return "VS Code"
+        default:
+            return "App"
+        }
+    }
+
     var promptPreview: String? {
         guard let userMessage else { return nil }
         let trimmed = userMessage.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1824,6 +1881,13 @@ private struct CompletionNote: View {
                         .font(Cairn.Typo.meta)
                         .foregroundStyle(Cairn.Ink.secondary)
                         .lineLimit(1)
+
+                    Text(completion.executionSurfaceName)
+                        .font(Cairn.Typo.micro.weight(.medium))
+                        .foregroundStyle(Cairn.Ink.secondary)
+                        .padding(.horizontal, Cairn.Space.xs)
+                        .padding(.vertical, Cairn.Space.xxs)
+                        .background(.quaternary, in: Capsule(style: .continuous))
                 }
 
                 Spacer(minLength: Cairn.Space.md)

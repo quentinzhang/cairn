@@ -22,6 +22,7 @@ private func note(
     sessionID: String = UUID().uuidString,
     cwd: String = "/Users/someone/Cairn",
     platform: String? = nil,
+    locator: CairnLocator? = nil,
     minutesAgo: Int = 0
 ) -> CodexCompletion {
     CodexCompletion(
@@ -39,7 +40,51 @@ private func note(
         userMessage: nil,
         model: nil,
         platform: platform,
-        locator: nil
+        locator: locator
+    )
+}
+
+/// A project name says where the work belongs; the adjacent tag says which
+/// surface it came from. The locator wins because a CLI payload can still have
+/// originated inside VS Code or a specific terminal app.
+@Test
+func noteHeadersNameTheirExecutionSurface() {
+    #expect(note(platform: "cli").executionSurfaceName == "Terminal")
+    #expect(note(platform: "desktop").executionSurfaceName == "App")
+    #expect(
+        note(
+            platform: "cli",
+            locator: CairnLocator(
+                termProgram: "vscode",
+                termSessionID: nil,
+                itermSessionID: nil,
+                tmuxPane: nil,
+                tty: nil,
+                hostAppPath: "/Applications/Visual Studio Code.app",
+                hostAppPID: nil,
+                agentPID: nil,
+                hostApps: nil,
+                webURL: nil,
+                browserBundleID: nil
+            )
+        ).executionSurfaceName == "VS Code"
+    )
+    #expect(
+        note(
+            locator: CairnLocator(
+                termProgram: "iTerm.app",
+                termSessionID: nil,
+                itermSessionID: nil,
+                tmuxPane: nil,
+                tty: nil,
+                hostAppPath: nil,
+                hostAppPID: nil,
+                agentPID: nil,
+                hostApps: nil,
+                webURL: nil,
+                browserBundleID: nil
+            )
+        ).executionSurfaceName == "iTerm"
     )
 }
 
