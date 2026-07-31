@@ -282,7 +282,7 @@ extension CodexCompletion {
         let hostAppNames = hostPaths.map {
             URL(fileURLWithPath: $0).lastPathComponent.lowercased()
         }
-        if hostAppNames.contains("visual studio code.app") || hostAppNames.contains("code.app") {
+        if hostAppNames.contains(where: Self.isVSCodeAppBundle) {
             return "VS Code"
         }
         if hostAppNames.contains("cursor.app") {
@@ -299,6 +299,15 @@ extension CodexCompletion {
         }
         if hostAppNames.contains("terminal.app") {
             return "Terminal"
+        }
+
+        // A hook can still describe a desktop client as `cli`: both Claude
+        // Code Desktop and an editor extension launch a CLI-shaped agent
+        // process. The recorded GUI ancestry is the more direct account of
+        // where the turn ran, so never let that generic producer hint turn an
+        // actual app into a Terminal label.
+        if !hostAppNames.isEmpty {
+            return "App"
         }
 
         let terminal = locator?.termProgram?
@@ -328,6 +337,15 @@ extension CodexCompletion {
         default:
             return "App"
         }
+    }
+
+    /// VS Code's stable app names include the regular build, Insiders, and
+    /// the Code OSS distribution. A literal `Visual Studio Code.app` check
+    /// made every Insiders extension turn fall through to its agent platform.
+    private static func isVSCodeAppBundle(_ name: String) -> Bool {
+        name == "code.app"
+            || name.hasPrefix("visual studio code") && name.hasSuffix(".app")
+            || name.hasPrefix("code - ") && name.hasSuffix(".app")
     }
 
     var promptPreview: String? {

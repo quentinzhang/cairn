@@ -69,6 +69,67 @@ func noteHeadersNameTheirExecutionSurface() {
             )
         ).executionSurfaceName == "VS Code"
     )
+    // The installed build is Insiders. Its extension host reports `cli`, so
+    // the bundle name must win over that producer-level fallback for both
+    // Claude Code and Codex.
+    #expect(
+        note(
+            source: "claude-code",
+            platform: "cli",
+            locator: CairnLocator(
+                termProgram: nil,
+                termSessionID: nil,
+                itermSessionID: nil,
+                tmuxPane: nil,
+                tty: nil,
+                hostAppPath: "/Applications/Visual Studio Code - Insiders.app",
+                hostAppPID: nil,
+                agentPID: nil,
+                hostApps: nil,
+                webURL: nil,
+                browserBundleID: nil
+            )
+        ).executionSurfaceName == "VS Code"
+    )
+    #expect(
+        note(
+            source: "codex",
+            locator: CairnLocator(
+                termProgram: nil,
+                termSessionID: nil,
+                itermSessionID: nil,
+                tmuxPane: nil,
+                tty: nil,
+                hostAppPath: "/Applications/Visual Studio Code - Insiders.app",
+                hostAppPID: nil,
+                agentPID: nil,
+                hostApps: nil,
+                webURL: nil,
+                browserBundleID: nil
+            )
+        ).executionSurfaceName == "VS Code"
+    )
+    // Claude Desktop hosts a CLI-shaped process too. A real app ancestor must
+    // therefore be classified as App rather than falling through to `cli`.
+    #expect(
+        note(
+            source: "claude-code",
+            platform: "cli",
+            locator: CairnLocator(
+                termProgram: nil,
+                termSessionID: nil,
+                itermSessionID: nil,
+                tmuxPane: nil,
+                tty: nil,
+                hostAppPath: "/Applications/Claude.app",
+                hostAppPID: nil,
+                agentPID: nil,
+                hostApps: nil,
+                webURL: nil,
+                browserBundleID: nil
+            )
+        ).executionSurfaceName == "App"
+    )
     #expect(
         note(
             locator: CairnLocator(
