@@ -560,6 +560,8 @@ final class FloatingQueuePresenter: ObservableObject {
     private let controlPanel: NSPanel
     private var hintPanel: NSPanel?
     private var updatePanel: NSPanel?
+    /// An announcement that arrived before anything could show it.
+    private var pendingUpdate: AppUpdate?
     private weak var store: CompletionStore?
     private let settings: CairnSettings
     private var screenObserver: NSObjectProtocol?
@@ -641,6 +643,7 @@ final class FloatingQueuePresenter: ObservableObject {
                 self.controlPanel.setFrame(self.initialControlFrame(), display: true)
                 self.syncPanels()
                 self.installShortcut()
+                self.presentPendingUpdateIfNeeded()
             }
         }
         screenObserver = NotificationCenter.default.addObserver(
@@ -758,6 +761,7 @@ final class FloatingQueuePresenter: ObservableObject {
         controlPanel.setFrame(initialControlFrame(), display: true)
         syncPanels()
         installShortcut()
+        presentPendingUpdateIfNeeded()
     }
 
     /// The shortcut is claimed only once the app is really running — never
@@ -895,6 +899,7 @@ final class FloatingQueuePresenter: ObservableObject {
         UserDefaults.standard.set(true, forKey: PreferenceKey.controlIntroduced)
         hintPanel.orderOut(nil)
         self.hintPanel = nil
+        presentPendingUpdateIfNeeded()
     }
 
     /// Cairn's own news, drawn by Cairn: a panel beside the stones rather than
@@ -908,7 +913,16 @@ final class FloatingQueuePresenter: ObservableObject {
     func announceUpdate(_ update: AppUpdate) {
         // First run outranks a version number: the introduction teaches what
         // the stones are, and this panel would stand in the same place.
-        guard hasFinishedLaunching, !surfacesHeld, hintPanel == nil else { return }
+        //
+        // Held rather than dropped. The check runs from `CairnApp.init()`, so
+        // it can answer before the app has finished launching, and onboarding
+        // can be holding every surface — neither is a reason for a version to
+        // go unannounced forever.
+        guard hasFinishedLaunching, !surfacesHeld, hintPanel == nil else {
+            pendingUpdate = update
+            return
+        }
+        pendingUpdate = nil
         dismissUpdateAnnouncement()
 
         let panel = NSPanel(
@@ -946,6 +960,15 @@ final class FloatingQueuePresenter: ObservableObject {
         panel.orderFrontRegardless()
         controlPanel.orderFrontRegardless()
         callAttention()
+
+        // On screen: only now is this version spent.
+        UpdateChecker.shared.confirmAnnounced(update.version)
+    }
+
+    /// Show whatever was held back, once the reason for holding it is gone.
+    private func presentPendingUpdateIfNeeded() {
+        guard let pendingUpdate else { return }
+        announceUpdate(pendingUpdate)
     }
 
     func dismissUpdateAnnouncement() {

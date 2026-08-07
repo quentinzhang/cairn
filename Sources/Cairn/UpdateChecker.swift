@@ -189,6 +189,17 @@ final class UpdateChecker: ObservableObject {
         startCheck(manual: true)
     }
 
+    /// The announcement reached a screen. Called by whoever drew it, which is
+    /// the only place that knows it actually happened.
+    ///
+    /// This is what makes an announcement once-per-version rather than
+    /// once-per-attempt: until it is confirmed, the next automatic check is
+    /// free to try again — including after a relaunch, since an attempt that
+    /// died with the process left nothing behind.
+    func confirmAnnounced(_ version: String) {
+        preferences.set(version, forKey: PreferenceKey.announcedVersion)
+    }
+
     func skip(_ update: AppUpdate) {
         preferences.set(update.version, forKey: PreferenceKey.skippedVersion)
         if available == update {
@@ -272,10 +283,15 @@ final class UpdateChecker: ObservableObject {
         }
         if !presentsResult,
            preferences.string(forKey: PreferenceKey.announcedVersion) != latestVersion {
-            // Recorded before announcing, and only on the automatic path: a
-            // version announces itself once, and a manual check — where the
-            // answer is already on screen — never draws a panel on top of it.
-            preferences.set(latestVersion, forKey: PreferenceKey.announcedVersion)
+            // Only on the automatic path: a manual check already put the
+            // answer on screen, and drawing a panel over it would be Cairn
+            // interrupting a conversation it is already in.
+            //
+            // Nothing is recorded here. The announcement can still fail to
+            // land — the app may not have finished launching, or onboarding
+            // may still be holding the surfaces — and a version marked as
+            // announced before it appeared is a version that never appears.
+            // `confirmAnnounced` closes the loop from wherever it lands.
             await announcer.announce(update)
         }
         status = .idle

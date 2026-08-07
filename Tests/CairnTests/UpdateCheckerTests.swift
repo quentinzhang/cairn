@@ -141,10 +141,62 @@ func automaticDiscoveryAnnouncesAnUpdateOncePerVersion() async {
 
     await checker.checkIfDue()?.value
     #expect(announcer.announcedVersions == ["0.7.0"])
+    // Spending the version is the presenter's job, once it is actually drawn.
+    checker.confirmAnnounced("0.7.0")
 
     defaults.removeObject(forKey: "cairn.update.lastCheckDate")
     await checker.checkIfDue()?.value
     #expect(announcer.announcedVersions == ["0.7.0"])
+}
+
+/// An announcement that never reached a screen is not spent. The check runs
+/// from `CairnApp.init()`, so it can answer before the app has finished
+/// launching, and onboarding can be holding every surface — if either counted
+/// as announced, that version would never be seen at all.
+@Test @MainActor
+func anUnconfirmedAnnouncementIsTriedAgain() async {
+    let defaults = isolatedDefaults()
+    let announcer = RecordingAnnouncer()
+    let checker = UpdateChecker(
+        client: StubReleaseClient(release: newerRelease),
+        preferences: defaults,
+        currentVersion: { "0.6.3" },
+        announcer: announcer
+    )
+
+    await checker.checkIfDue()?.value
+    #expect(announcer.announcedVersions == ["0.7.0"])
+
+    // No confirmation: nothing drew it.
+    defaults.removeObject(forKey: "cairn.update.lastCheckDate")
+    await checker.checkIfDue()?.value
+    #expect(announcer.announcedVersions == ["0.7.0", "0.7.0"])
+}
+
+/// A confirmation outlives the process — the whole reason it is a preference
+/// and not a flag on the checker.
+@Test @MainActor
+func aConfirmedAnnouncementStaysSpentAcrossRelaunch() async {
+    let defaults = isolatedDefaults()
+    let first = UpdateChecker(
+        client: StubReleaseClient(release: newerRelease),
+        preferences: defaults,
+        currentVersion: { "0.6.3" },
+        announcer: RecordingAnnouncer()
+    )
+    await first.checkIfDue()?.value
+    first.confirmAnnounced("0.7.0")
+
+    let announcer = RecordingAnnouncer()
+    let relaunched = UpdateChecker(
+        client: StubReleaseClient(release: newerRelease),
+        preferences: defaults,
+        currentVersion: { "0.6.3" },
+        announcer: announcer
+    )
+    defaults.removeObject(forKey: "cairn.update.lastCheckDate")
+    await relaunched.checkIfDue()?.value
+    #expect(announcer.announcedVersions.isEmpty)
 }
 
 /// The panel is the automatic path's job alone. A manual check already puts
