@@ -639,6 +639,10 @@ footer p, footer a {
   color: var(--ink-3);
   text-decoration: none;
 }
+/* The line is a row of separate stamps, so it may wrap between them but
+   never inside one. Without this the CJK links break mid-phrase, which
+   reads as a typo rather than as a line ending. */
+footer a { white-space: nowrap; }
 footer a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 
 /* ---- motion ------------------------------------------------------- */
@@ -909,7 +913,7 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
     <span class="foot-mark">Cairn</span>
     <span class="foot-seal brand-cjk" aria-hidden="true">跡</span>
   </div>
-  <p><span data-i18n="foot">A trail for every task.</span> · © 2026 · <a href="https://github.com/quentinzhang/cairn" data-i18n="gh">GitHub</a> · <a href="https://github.com/quentinzhang/cairn/blob/main/LICENSE">Apache-2.0</a></p>
+  <p><span data-i18n="foot">A trail for every task.</span> · © 2026 · <a href="https://github.com/quentinzhang/cairn" data-i18n="gh">GitHub</a> · <a href="https://github.com/quentinzhang/cairn/blob/main/LICENSE">Apache-2.0</a> · <a href="https://github.com/quentinzhang/cairn/discussions/1" data-i18n="feedback">Tell me if it helps</a></p>
 </footer>
 
 <script>
@@ -951,6 +955,7 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
       mock2r: "Migration complete — 42 endpoints moved, zero regressions.",
       foot: "A trail for every task.",
       gh: "GitHub",
+      feedback: "Tell me if it helps",
       themeSystem: "Theme: system",
       themeLight: "Theme: light",
       themeDark: "Theme: dark"
@@ -991,6 +996,7 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
       mock2r: "迁移完成——42 个端点全部就位，零回归。",
       foot: "每完成一次，留一道迹。",
       gh: "GitHub",
+      feedback: "告诉我它有没有用",
       themeSystem: "主题：跟随系统",
       themeLight: "主题：浅色",
       themeDark: "主题：深色"
@@ -1031,6 +1037,7 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
       mock2r: "移行完了——42のエンドポイント、リグレッションなし。",
       foot: "すべてのタスクを、たどれる跡に。",
       gh: "GitHub",
+      feedback: "役に立っていますか",
       themeSystem: "テーマ：システム",
       themeLight: "テーマ：ライト",
       themeDark: "テーマ：ダーク"

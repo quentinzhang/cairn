@@ -31,7 +31,9 @@
 "menu.settings" = "Settings…";
 "settings.window.title" = "Cairn Settings";
 "settings.section.preferences" = "Preferences";
+"settings.section.update" = "Update";
 "settings.section.setup" = "Setup";
+"settings.section.feedback" = "Feedback";
 "settings.done" = "Done";
 "settings.open" = "Open";
 "settings.launch_at_login" = "Open at login";
@@ -56,6 +58,10 @@
 "settings.shortcut.unavailable" = "Another app answers to this combination. Record a different one.";
 "settings.apps.detail" = "Connect the coding agents whose finished turns leave a note.";
 "settings.access.detail" = "Grant the access that makes a click land on the exact tab, window, or session.";
+"settings.update.detail" = "Cairn checks once a day and lets you choose when to download.";
+"settings.update.available.detail" = "Cairn %@ is ready to download.";
+"settings.feedback" = "Tell me whether it helps";
+"settings.feedback.detail" = "Cairn measures nothing, so a thread you choose to open is the only way I hear that it works.";
 
 "update.available" = "Update available";
 "update.version_format" = "Cairn %@";
@@ -64,6 +70,8 @@
 "update.checking" = "Checking…";
 "update.up_to_date" = "Up to date";
 "update.failed" = "Couldn’t check for updates";
+"update.download" = "Download";
+"update.notification.body" = "Cairn %@ is ready to download.";
 
 "relative.now" = "now";
 "relative.minutes" = "%dm";

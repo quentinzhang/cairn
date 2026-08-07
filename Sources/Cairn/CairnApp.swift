@@ -26,6 +26,14 @@ enum CairnBuildInfo {
         }
         return L10n.format("build.version_format", version, build)
     }
+
+    /// The one place Cairn asks for something back.
+    ///
+    /// The product measures nothing — no account, no analytics, no telemetry —
+    /// so a thread someone chooses to open is the only channel that exists.
+    /// Opening it carries no identifier and no note data; it is a link, not a
+    /// report.
+    static let feedbackURL = URL(string: "https://github.com/quentinzhang/cairn/discussions/1")!
 }
 
 @main
