@@ -1104,9 +1104,16 @@ final class FloatingQueuePresenter: ObservableObject {
     /// where the stones are — so without this reservation the announcement
     /// lands exactly on the newest note. Zero whenever no announcement is up,
     /// which is almost always.
+    ///
+    /// The panel's frame is larger than the card drawn inside it (`Space.md`
+    /// all round, for the shadow) and the queue insets its own content by
+    /// `Space.lg`. Subtracting that inset lands the two cards exactly
+    /// `noteCardSpacing` apart — the same rhythm notes keep with each other,
+    /// which is what makes the announcement read as the top of one column
+    /// rather than a second floating thing.
     private var announcementReservedHeight: CGFloat {
         guard let updatePanel, updatePanel.isVisible else { return 0 }
-        return updatePanel.frame.height + Cairn.Metrics.panelGap
+        return max(0, updatePanel.frame.height - Cairn.Space.lg)
     }
 
     private func initialControlFrame() -> NSRect {
