@@ -71,6 +71,7 @@
 "update.up_to_date" = "最新バージョンです";
 "update.failed" = "アップデートを確認できませんでした";
 "update.download" = "ダウンロード";
+"update.later" = "あとで";
 "update.notification.body" = "Cairn %@ をダウンロードできます。";
 
 "relative.now" = "今";

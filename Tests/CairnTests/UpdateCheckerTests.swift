@@ -16,7 +16,7 @@ private struct StubReleaseClient: ReleaseChecking {
 }
 
 @MainActor
-private final class RecordingUpdateNotifier: UpdateNotificationScheduling {
+private final class RecordingAnnouncer: UpdateAnnouncing {
     private(set) var announcedVersions: [String] = []
 
     func announce(_ update: AppUpdate) async {
@@ -131,18 +131,55 @@ func skipPersistsButAnExplicitCheckCanRevealTheVersionAgain() async {
 @Test @MainActor
 func automaticDiscoveryAnnouncesAnUpdateOncePerVersion() async {
     let defaults = isolatedDefaults()
-    let notifier = RecordingUpdateNotifier()
+    let announcer = RecordingAnnouncer()
     let checker = UpdateChecker(
         client: StubReleaseClient(release: newerRelease),
         preferences: defaults,
         currentVersion: { "0.6.3" },
-        notificationScheduler: notifier
+        announcer: announcer
     )
 
     await checker.checkIfDue()?.value
-    #expect(notifier.announcedVersions == ["0.7.0"])
+    #expect(announcer.announcedVersions == ["0.7.0"])
 
     defaults.removeObject(forKey: "cairn.update.lastCheckDate")
     await checker.checkIfDue()?.value
-    #expect(notifier.announcedVersions == ["0.7.0"])
+    #expect(announcer.announcedVersions == ["0.7.0"])
+}
+
+/// The panel is the automatic path's job alone. A manual check already puts
+/// the answer on screen — in the menu row and in Settings — so drawing a panel
+/// on top of it would be Cairn interrupting a conversation it is already in.
+@Test @MainActor
+func aManualCheckNeverAnnouncesItself() async {
+    let defaults = isolatedDefaults()
+    let announcer = RecordingAnnouncer()
+    let checker = UpdateChecker(
+        client: StubReleaseClient(release: newerRelease),
+        preferences: defaults,
+        currentVersion: { "0.6.3" },
+        announcer: announcer
+    )
+
+    await checker.checkNow()?.value
+    #expect(checker.available?.version == "0.7.0")
+    #expect(announcer.announcedVersions.isEmpty)
+}
+
+/// A version the user has already turned down stays turned down: the panel is
+/// once per version, and skipping is the stronger signal.
+@Test @MainActor
+func aSkippedVersionNeverAnnouncesItself() async {
+    let defaults = isolatedDefaults()
+    defaults.set("0.7.0", forKey: "cairn.update.skippedVersion")
+    let announcer = RecordingAnnouncer()
+    let checker = UpdateChecker(
+        client: StubReleaseClient(release: newerRelease),
+        preferences: defaults,
+        currentVersion: { "0.6.3" },
+        announcer: announcer
+    )
+
+    await checker.checkIfDue()?.value
+    #expect(announcer.announcedVersions.isEmpty)
 }

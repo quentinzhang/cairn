@@ -1,5 +1,4 @@
 import Foundation
-import UserNotifications
 
 struct AppUpdate: Codable, Equatable, Sendable {
     let version: String
@@ -36,66 +35,35 @@ protocol ReleaseChecking: Sendable {
     func latestRelease() async throws -> ReleaseDescriptor
 }
 
-/// The system-facing part of update discovery. Keeping it behind this small
-/// boundary lets the checker promise exactly one announcement for a version
-/// without making its tests depend on Notification Center.
+/// How a found update reaches the person. Behind this small boundary so the
+/// checker can promise exactly one announcement per version without its tests
+/// having to draw anything.
 @MainActor
-protocol UpdateNotificationScheduling {
+protocol UpdateAnnouncing {
     func announce(_ update: AppUpdate) async
 }
 
-enum CairnUpdateNotification {
-    static let categoryIdentifier = "app.cairn.update"
-    static let downloadActionIdentifier = "download"
-    static let installURLKey = "installURL"
+enum CairnUpdateAnnouncement {
+    /// The `AppUpdate` carried on `.cairnUpdateDidArrive`.
+    static let updateKey = "update"
 }
 
+/// Cairn announces its own update the way it announces everything else: by
+/// drawing its own panel beside the stones.
+///
+/// Deliberately **not** a system notification. The queue asks macOS for no
+/// privacy permission at all — that is the claim in SECURITY.md and the first
+/// line of every README — and the app's own version number is not the reason
+/// to start asking. A panel Cairn draws itself also cannot take the keyboard,
+/// which a banner with a button can.
 @MainActor
-struct SystemUpdateNotificationScheduler: UpdateNotificationScheduling {
+struct PanelUpdateAnnouncer: UpdateAnnouncing {
     func announce(_ update: AppUpdate) async {
-        let center = UNUserNotificationCenter.current()
-        let settings = await center.notificationSettings()
-
-        switch settings.authorizationStatus {
-        case .notDetermined:
-            guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else {
-                return
-            }
-        case .authorized, .provisional, .ephemeral:
-            break
-        case .denied:
-            return
-        @unknown default:
-            return
-        }
-
-        let downloadAction = UNNotificationAction(
-            identifier: CairnUpdateNotification.downloadActionIdentifier,
-            title: L10n.string("update.download"),
-            options: [.foreground]
+        NotificationCenter.default.post(
+            name: .cairnUpdateDidArrive,
+            object: nil,
+            userInfo: [CairnUpdateAnnouncement.updateKey: update]
         )
-        let category = UNNotificationCategory(
-            identifier: CairnUpdateNotification.categoryIdentifier,
-            actions: [downloadAction],
-            intentIdentifiers: [],
-            options: [.customDismissAction]
-        )
-        center.setNotificationCategories([category])
-
-        let content = UNMutableNotificationContent()
-        content.title = L10n.string("update.available")
-        content.body = L10n.format("update.notification.body", update.version)
-        content.sound = .default
-        content.categoryIdentifier = CairnUpdateNotification.categoryIdentifier
-        content.userInfo = [CairnUpdateNotification.installURLKey: update.installURL.absoluteString]
-
-        let identifier = "app.cairn.update.\(update.version)"
-        center.removePendingNotificationRequests(withIdentifiers: [identifier])
-        try? await center.add(UNNotificationRequest(
-            identifier: identifier,
-            content: content,
-            trigger: nil
-        ))
     }
 }
 
@@ -179,13 +147,13 @@ final class UpdateChecker: ObservableObject {
         static let availableVersion = "cairn.update.availableVersion"
         static let availableReleaseURL = "cairn.update.availableReleaseURL"
         static let availableDownloadURL = "cairn.update.availableDownloadURL"
-        static let notifiedVersion = "cairn.update.notifiedVersion"
+        static let announcedVersion = "cairn.update.announcedVersion"
     }
 
     private let client: any ReleaseChecking
     private let preferences: UserDefaults
     private let currentVersion: @MainActor () -> String?
-    private let notificationScheduler: any UpdateNotificationScheduling
+    private let announcer: any UpdateAnnouncing
     private var timer: Timer?
     private var checkTask: Task<Void, Never>?
     private var manualResultRequested = false
@@ -196,12 +164,12 @@ final class UpdateChecker: ObservableObject {
         currentVersion: @escaping @MainActor () -> String? = {
             Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
         },
-        notificationScheduler: any UpdateNotificationScheduling = SystemUpdateNotificationScheduler()
+        announcer: any UpdateAnnouncing = PanelUpdateAnnouncer()
     ) {
         self.client = client
         self.preferences = preferences
         self.currentVersion = currentVersion
-        self.notificationScheduler = notificationScheduler
+        self.announcer = announcer
         available = Self.restoredUpdate(
             preferences: preferences,
             currentVersion: currentVersion()
@@ -303,12 +271,12 @@ final class UpdateChecker: ObservableObject {
             preferences.removeObject(forKey: PreferenceKey.availableDownloadURL)
         }
         if !presentsResult,
-           preferences.string(forKey: PreferenceKey.notifiedVersion) != latestVersion {
-            // Record the attempt before awaiting Notification Center. This is
-            // deliberately once per version: denying the system permission
-            // must not create a fresh permission prompt every day.
-            preferences.set(latestVersion, forKey: PreferenceKey.notifiedVersion)
-            await notificationScheduler.announce(update)
+           preferences.string(forKey: PreferenceKey.announcedVersion) != latestVersion {
+            // Recorded before announcing, and only on the automatic path: a
+            // version announces itself once, and a manual check — where the
+            // answer is already on screen — never draws a panel on top of it.
+            preferences.set(latestVersion, forKey: PreferenceKey.announcedVersion)
+            await announcer.announce(update)
         }
         status = .idle
     }

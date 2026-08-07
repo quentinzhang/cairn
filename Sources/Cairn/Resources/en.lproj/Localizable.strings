@@ -71,6 +71,7 @@
 "update.up_to_date" = "Up to date";
 "update.failed" = "Couldn’t check for updates";
 "update.download" = "Download";
+"update.later" = "Later";
 "update.notification.body" = "Cairn %@ is ready to download.";
 
 "relative.now" = "now";

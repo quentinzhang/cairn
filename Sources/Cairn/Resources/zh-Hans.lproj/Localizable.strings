@@ -71,6 +71,7 @@
 "update.up_to_date" = "已是最新版本";
 "update.failed" = "无法检查更新";
 "update.download" = "下载";
+"update.later" = "以后再说";
 "update.notification.body" = "Cairn %@ 已可下载。";
 
 "relative.now" = "刚刚";
