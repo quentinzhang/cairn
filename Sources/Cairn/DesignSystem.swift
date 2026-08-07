@@ -285,6 +285,22 @@ extension Cairn {
             washDark: 0.16
         )
 
+        /// Cairn's own jade — the one tone that belongs to no agent.
+        ///
+        /// Reserved by the same reasoning that took teal away from Codex
+        /// (see `codex`): a jade card reads as a message from the app itself.
+        /// That is exactly what it is used for, and it is why nothing else on
+        /// this desktop may wear it.
+        static let cairn = Tone(
+            hue: Brand.jade,
+            railLight: Color(hex: 0x14806F),
+            railDark: Brand.jadeGlow,
+            labelLight: Brand.jadeDeep,
+            labelDark: Color(hex: 0x6FD8C4),
+            washLight: 0.10,
+            washDark: 0.16
+        )
+
         /// Any source Cairn has not been taught yet.
         static let unknown = Tone(
             hue: Color(hex: 0xD18529),

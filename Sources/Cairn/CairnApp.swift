@@ -1667,45 +1667,90 @@ private struct UpdateAnnouncementView: View {
     let onDownload: () -> Void
     let onDismiss: () -> Void
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: Cairn.Space.lg) {
-            VStack(alignment: .leading, spacing: Cairn.Space.xs) {
-                Text(L10n.string("update.available"))
-                    .font(Cairn.Typo.label)
-                    .foregroundStyle(Cairn.Brand.jade)
+    private var tone: Cairn.Tone { .cairn }
 
-                // Wrap rather than truncate: the panel takes its width from
-                // this view, and a measured single line ends in "…".
-                Text(L10n.format("update.notification.body", update.version))
-                    .fixedSize(horizontal: false, vertical: true)
+    var body: some View {
+        VStack(alignment: .leading, spacing: Cairn.Space.md) {
+            // A note's header without the glyph: the jade rail already says
+            // who is speaking, the same way an agent's rail does, and the
+            // three-stone mark is illegible at an agent glyph's size.
+            HStack(spacing: Cairn.Space.xs) {
+                Text(verbatim: "Cairn")
+                    .font(Cairn.Typo.label)
+                    .foregroundStyle(tone.label(scheme))
+
+                Text("· \(L10n.string("update.available"))")
+                    .font(Cairn.Typo.label)
+                    .foregroundStyle(Cairn.Ink.tertiary)
             }
 
-            HStack(spacing: Cairn.Space.lg) {
+            // Wrap rather than truncate: the panel takes its width from this
+            // view, and a measured single line ends in "…".
+            Text(L10n.format("update.notification.body", update.version))
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: Cairn.Space.md) {
                 Spacer()
 
+                // Later stays text: the panel already goes away on its own
+                // terms, and two filled buttons would make a dialog out of a
+                // note.
                 Button(L10n.string("update.later"), action: onDismiss)
                     .buttonStyle(.borderless)
                     .font(Cairn.Typo.label)
                     .foregroundStyle(Cairn.Ink.tertiary)
 
-                Button(L10n.string("update.download"), action: onDownload)
-                    .buttonStyle(.borderless)
-                    .font(Cairn.Typo.label)
-                    .foregroundStyle(Cairn.Brand.jade)
+                // A shape, not just a colour: bare jade text on a jade wash is
+                // a tint, not an affordance. Filled and bordered in jade, with
+                // a jade label — white on jade belongs to Settings, where the
+                // button sits on an opaque sheet rather than on a translucent
+                // card over the wallpaper.
+                Button(action: onDownload) {
+                    Text(L10n.string("update.download"))
+                        .font(Cairn.Typo.label)
+                        .foregroundStyle(tone.label(scheme))
+                        .padding(.horizontal, Cairn.Space.md)
+                        .padding(.vertical, Cairn.Space.xs)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(tone.rail(scheme).opacity(0.18))
+                        )
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .strokeBorder(
+                                    tone.rail(scheme).opacity(0.45),
+                                    lineWidth: Cairn.Stroke.width
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
             }
         }
         .font(Cairn.Typo.meta)
         .foregroundStyle(Cairn.Ink.body)
-        .padding(Cairn.Space.xl)
-        .frame(width: 264, alignment: .leading)
-        .background(
+        .padding(Cairn.Space.lg)
+        .frame(width: Cairn.Metrics.notePanelWidth - Cairn.Space.lg * 2, alignment: .leading)
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: Cairn.Radius.card, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: Cairn.Radius.card, style: .continuous)
+                    .fill(tone.wash(scheme))
+            }
+        }
+        .overlay(alignment: .leading) {
+            Capsule()
+                .fill(tone.rail(scheme))
+                .frame(
+                    width: Cairn.Metrics.noteRailWidth,
+                    height: Cairn.Metrics.noteRailHeight
+                )
+                .padding(.leading, Cairn.Space.xs)
+        }
+        .overlay {
             RoundedRectangle(cornerRadius: Cairn.Radius.card, style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Cairn.Radius.card, style: .continuous)
-                .strokeBorder(Cairn.Stroke.controlResting(scheme), lineWidth: Cairn.Stroke.width)
-        )
+                .strokeBorder(tone.rail(scheme).opacity(0.55), lineWidth: Cairn.Stroke.width)
+        }
         .cairnShadow(.note(scheme))
         .padding(Cairn.Space.md)
     }
