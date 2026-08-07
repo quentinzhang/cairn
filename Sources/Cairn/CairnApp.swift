@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import Foundation
 import SwiftUI
+import UserNotifications
 
 enum CairnBuildInfo {
     static var displayVersion: String {
@@ -62,7 +63,7 @@ struct CairnApp: App {
                 settings: settings
             )
         )
-        let updateChecker = UpdateChecker()
+        let updateChecker = UpdateChecker.shared
         updateChecker.start()
         _updateChecker = StateObject(wrappedValue: updateChecker)
         _permissions = StateObject(wrappedValue: PermissionExperience.shared)
@@ -149,14 +150,42 @@ enum CairnMenuBarIcon {
 }
 
 @MainActor
-final class CairnAppDelegate: NSObject, NSApplicationDelegate {
+final class CairnAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        UNUserNotificationCenter.current().delegate = self
         PermissionExperience.shared.refresh()
         // The first launch goes straight to the one thing Cairn cannot work
         // without: connecting an agent. Access is an optional upgrade and
         // waits in the menu.
         AgentConnectionCenter.shared.start()
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        defer { completionHandler() }
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier
+                || response.actionIdentifier == CairnUpdateNotification.downloadActionIdentifier,
+              let installURL = response.notification.request.content.userInfo[
+                CairnUpdateNotification.installURLKey
+              ] as? String,
+              let url = URL(string: installURL) else {
+            return
+        }
+        Task { @MainActor in
+            NSWorkspace.shared.open(url)
+        }
     }
 }
 

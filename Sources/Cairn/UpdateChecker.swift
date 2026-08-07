@@ -1,4 +1,5 @@
 import Foundation
+import UserNotifications
 
 struct AppUpdate: Codable, Equatable, Sendable {
     let version: String
@@ -33,6 +34,69 @@ struct ReleaseDescriptor: Equatable, Sendable {
 
 protocol ReleaseChecking: Sendable {
     func latestRelease() async throws -> ReleaseDescriptor
+}
+
+/// The system-facing part of update discovery. Keeping it behind this small
+/// boundary lets the checker promise exactly one announcement for a version
+/// without making its tests depend on Notification Center.
+@MainActor
+protocol UpdateNotificationScheduling {
+    func announce(_ update: AppUpdate) async
+}
+
+enum CairnUpdateNotification {
+    static let categoryIdentifier = "app.cairn.update"
+    static let downloadActionIdentifier = "download"
+    static let installURLKey = "installURL"
+}
+
+@MainActor
+struct SystemUpdateNotificationScheduler: UpdateNotificationScheduling {
+    func announce(_ update: AppUpdate) async {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+
+        switch settings.authorizationStatus {
+        case .notDetermined:
+            guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else {
+                return
+            }
+        case .authorized, .provisional, .ephemeral:
+            break
+        case .denied:
+            return
+        @unknown default:
+            return
+        }
+
+        let downloadAction = UNNotificationAction(
+            identifier: CairnUpdateNotification.downloadActionIdentifier,
+            title: L10n.string("update.download"),
+            options: [.foreground]
+        )
+        let category = UNNotificationCategory(
+            identifier: CairnUpdateNotification.categoryIdentifier,
+            actions: [downloadAction],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
+        center.setNotificationCategories([category])
+
+        let content = UNMutableNotificationContent()
+        content.title = L10n.string("update.available")
+        content.body = L10n.format("update.notification.body", update.version)
+        content.sound = .default
+        content.categoryIdentifier = CairnUpdateNotification.categoryIdentifier
+        content.userInfo = [CairnUpdateNotification.installURLKey: update.installURL.absoluteString]
+
+        let identifier = "app.cairn.update.\(update.version)"
+        center.removePendingNotificationRequests(withIdentifiers: [identifier])
+        try? await center.add(UNNotificationRequest(
+            identifier: identifier,
+            content: content,
+            trigger: nil
+        ))
+    }
 }
 
 struct GitHubReleaseClient: ReleaseChecking {
@@ -100,6 +164,8 @@ enum UpdateCheckStatus: Equatable, Sendable {
 /// cooldown cannot make the row disappear.
 @MainActor
 final class UpdateChecker: ObservableObject {
+    static let shared = UpdateChecker()
+
     @Published private(set) var available: AppUpdate?
     @Published private(set) var status: UpdateCheckStatus = .idle
 
@@ -113,11 +179,13 @@ final class UpdateChecker: ObservableObject {
         static let availableVersion = "cairn.update.availableVersion"
         static let availableReleaseURL = "cairn.update.availableReleaseURL"
         static let availableDownloadURL = "cairn.update.availableDownloadURL"
+        static let notifiedVersion = "cairn.update.notifiedVersion"
     }
 
     private let client: any ReleaseChecking
     private let preferences: UserDefaults
     private let currentVersion: @MainActor () -> String?
+    private let notificationScheduler: any UpdateNotificationScheduling
     private var timer: Timer?
     private var checkTask: Task<Void, Never>?
     private var manualResultRequested = false
@@ -127,11 +195,13 @@ final class UpdateChecker: ObservableObject {
         preferences: UserDefaults = .standard,
         currentVersion: @escaping @MainActor () -> String? = {
             Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-        }
+        },
+        notificationScheduler: any UpdateNotificationScheduling = SystemUpdateNotificationScheduler()
     ) {
         self.client = client
         self.preferences = preferences
         self.currentVersion = currentVersion
+        self.notificationScheduler = notificationScheduler
         available = Self.restoredUpdate(
             preferences: preferences,
             currentVersion: currentVersion()
@@ -143,7 +213,7 @@ final class UpdateChecker: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: Config.checkInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.checkIfDue() }
         }
-        checkIfDue()
+        _ = checkIfDue()
     }
 
     @discardableResult
@@ -159,13 +229,14 @@ final class UpdateChecker: ObservableObject {
         status = .idle
     }
 
-    private func checkIfDue() {
+    @discardableResult
+    func checkIfDue() -> Task<Void, Never>? {
         let lastCheck = preferences.object(forKey: PreferenceKey.lastCheckDate) as? Date
         guard lastCheck == nil
                 || Date().timeIntervalSince(lastCheck!) >= Config.checkInterval else {
-            return
+            return nil
         }
-        startCheck(manual: false)
+        return startCheck(manual: false)
     }
 
     @discardableResult
@@ -230,6 +301,14 @@ final class UpdateChecker: ObservableObject {
             preferences.set(downloadURL.absoluteString, forKey: PreferenceKey.availableDownloadURL)
         } else {
             preferences.removeObject(forKey: PreferenceKey.availableDownloadURL)
+        }
+        if !presentsResult,
+           preferences.string(forKey: PreferenceKey.notifiedVersion) != latestVersion {
+            // Record the attempt before awaiting Notification Center. This is
+            // deliberately once per version: denying the system permission
+            // must not create a fresh permission prompt every day.
+            preferences.set(latestVersion, forKey: PreferenceKey.notifiedVersion)
+            await notificationScheduler.announce(update)
         }
         status = .idle
     }

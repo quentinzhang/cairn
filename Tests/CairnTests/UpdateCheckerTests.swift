@@ -15,6 +15,15 @@ private struct StubReleaseClient: ReleaseChecking {
     }
 }
 
+@MainActor
+private final class RecordingUpdateNotifier: UpdateNotificationScheduling {
+    private(set) var announcedVersions: [String] = []
+
+    func announce(_ update: AppUpdate) async {
+        announcedVersions.append(update.version)
+    }
+}
+
 private func isolatedDefaults() -> UserDefaults {
     let suite = "CairnTests.UpdateChecker.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!
@@ -117,4 +126,23 @@ func skipPersistsButAnExplicitCheckCanRevealTheVersionAgain() async {
 
     await relaunched.checkNow()?.value
     #expect(relaunched.available?.version == "0.7.0")
+}
+
+@Test @MainActor
+func automaticDiscoveryAnnouncesAnUpdateOncePerVersion() async {
+    let defaults = isolatedDefaults()
+    let notifier = RecordingUpdateNotifier()
+    let checker = UpdateChecker(
+        client: StubReleaseClient(release: newerRelease),
+        preferences: defaults,
+        currentVersion: { "0.6.3" },
+        notificationScheduler: notifier
+    )
+
+    await checker.checkIfDue()?.value
+    #expect(notifier.announcedVersions == ["0.7.0"])
+
+    defaults.removeObject(forKey: "cairn.update.lastCheckDate")
+    await checker.checkIfDue()?.value
+    #expect(notifier.announcedVersions == ["0.7.0"])
 }
