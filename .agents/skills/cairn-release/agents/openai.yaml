@@ -1,7 +1,0 @@
-interface:
-  display_name: "Cairn Release"
-  short_description: "Preflight, notarize, publish, and verify Cairn releases"
-  default_prompt: "Use $cairn-release to preflight and publish a new Cairn production release."
-
-policy:
-  allow_implicit_invocation: true

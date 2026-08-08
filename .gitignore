@@ -38,5 +38,5 @@ docs/vscode-conversation-trail.md
 # Local marketing context
 videos/
 
-# .agents/
+# Local agent skills (dev/ops workflows, not part of the public repo)
 .agents/
