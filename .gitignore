@@ -33,6 +33,10 @@ __pycache__/
 # Local product marketing context
 docs/product-marketing-context.md
 docs/product-marketing-context.zh-CN.md
+docs/vscode-conversation-trail.md
 
 # Local marketing context
 videos/
+
+# .agents/
+.agents/
