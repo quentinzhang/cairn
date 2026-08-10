@@ -2052,21 +2052,13 @@ private struct QueueHeader: View {
                 isConfirmingClear = false
             }
         }
-        .padding(.horizontal, Cairn.Space.lg)
         .frame(maxWidth: .infinity, alignment: .trailing)
         .frame(height: Cairn.Metrics.noteChromeHeight)
-        .background {
-            Capsule(style: .continuous)
-                .fill(.ultraThinMaterial)
-        }
-        .overlay {
-            Capsule(style: .continuous)
-                .strokeBorder(
-                    Color.white.opacity(colorScheme == .dark ? 0.28 : 0.72),
-                    lineWidth: Cairn.Stroke.width
-                )
-        }
-        .cairnShadow(.note(colorScheme))
+        // No bar behind it. The question is the row for as long as it is
+        // asked, and a second surface under a row that is already floating
+        // over the desktop reads as a thing that arrived rather than as the
+        // control changing what it says. The two answers keep their own
+        // backing — they are what has to stay readable over any wallpaper.
         .transition(.opacity)
         .onExitCommand { isConfirmingClear = false }
     }
