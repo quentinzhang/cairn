@@ -35,6 +35,38 @@ protocol ReleaseChecking: Sendable {
     func latestRelease() async throws -> ReleaseDescriptor
 }
 
+/// How a found update reaches the person. Behind this small boundary so the
+/// checker can promise exactly one announcement per version without its tests
+/// having to draw anything.
+@MainActor
+protocol UpdateAnnouncing {
+    func announce(_ update: AppUpdate) async
+}
+
+enum CairnUpdateAnnouncement {
+    /// The `AppUpdate` carried on `.cairnUpdateDidArrive`.
+    static let updateKey = "update"
+}
+
+/// Cairn announces its own update the way it announces everything else: by
+/// drawing its own panel beside the stones.
+///
+/// Deliberately **not** a system notification. The queue asks macOS for no
+/// privacy permission at all — that is the claim in SECURITY.md and the first
+/// line of every README — and the app's own version number is not the reason
+/// to start asking. A panel Cairn draws itself also cannot take the keyboard,
+/// which a banner with a button can.
+@MainActor
+struct PanelUpdateAnnouncer: UpdateAnnouncing {
+    func announce(_ update: AppUpdate) async {
+        NotificationCenter.default.post(
+            name: .cairnUpdateDidArrive,
+            object: nil,
+            userInfo: [CairnUpdateAnnouncement.updateKey: update]
+        )
+    }
+}
+
 struct GitHubReleaseClient: ReleaseChecking {
     private let session: URLSession
     private let endpoint: URL
@@ -100,6 +132,8 @@ enum UpdateCheckStatus: Equatable, Sendable {
 /// cooldown cannot make the row disappear.
 @MainActor
 final class UpdateChecker: ObservableObject {
+    static let shared = UpdateChecker()
+
     @Published private(set) var available: AppUpdate?
     @Published private(set) var status: UpdateCheckStatus = .idle
 
@@ -113,11 +147,13 @@ final class UpdateChecker: ObservableObject {
         static let availableVersion = "cairn.update.availableVersion"
         static let availableReleaseURL = "cairn.update.availableReleaseURL"
         static let availableDownloadURL = "cairn.update.availableDownloadURL"
+        static let announcedVersion = "cairn.update.announcedVersion"
     }
 
     private let client: any ReleaseChecking
     private let preferences: UserDefaults
     private let currentVersion: @MainActor () -> String?
+    private let announcer: any UpdateAnnouncing
     private var timer: Timer?
     private var checkTask: Task<Void, Never>?
     private var manualResultRequested = false
@@ -127,11 +163,13 @@ final class UpdateChecker: ObservableObject {
         preferences: UserDefaults = .standard,
         currentVersion: @escaping @MainActor () -> String? = {
             Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-        }
+        },
+        announcer: any UpdateAnnouncing = PanelUpdateAnnouncer()
     ) {
         self.client = client
         self.preferences = preferences
         self.currentVersion = currentVersion
+        self.announcer = announcer
         available = Self.restoredUpdate(
             preferences: preferences,
             currentVersion: currentVersion()
@@ -143,12 +181,23 @@ final class UpdateChecker: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: Config.checkInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.checkIfDue() }
         }
-        checkIfDue()
+        _ = checkIfDue()
     }
 
     @discardableResult
     func checkNow() -> Task<Void, Never>? {
         startCheck(manual: true)
+    }
+
+    /// The announcement reached a screen. Called by whoever drew it, which is
+    /// the only place that knows it actually happened.
+    ///
+    /// This is what makes an announcement once-per-version rather than
+    /// once-per-attempt: until it is confirmed, the next automatic check is
+    /// free to try again — including after a relaunch, since an attempt that
+    /// died with the process left nothing behind.
+    func confirmAnnounced(_ version: String) {
+        preferences.set(version, forKey: PreferenceKey.announcedVersion)
     }
 
     func skip(_ update: AppUpdate) {
@@ -159,13 +208,14 @@ final class UpdateChecker: ObservableObject {
         status = .idle
     }
 
-    private func checkIfDue() {
+    @discardableResult
+    func checkIfDue() -> Task<Void, Never>? {
         let lastCheck = preferences.object(forKey: PreferenceKey.lastCheckDate) as? Date
         guard lastCheck == nil
                 || Date().timeIntervalSince(lastCheck!) >= Config.checkInterval else {
-            return
+            return nil
         }
-        startCheck(manual: false)
+        return startCheck(manual: false)
     }
 
     @discardableResult
@@ -230,6 +280,19 @@ final class UpdateChecker: ObservableObject {
             preferences.set(downloadURL.absoluteString, forKey: PreferenceKey.availableDownloadURL)
         } else {
             preferences.removeObject(forKey: PreferenceKey.availableDownloadURL)
+        }
+        if !presentsResult,
+           preferences.string(forKey: PreferenceKey.announcedVersion) != latestVersion {
+            // Only on the automatic path: a manual check already put the
+            // answer on screen, and drawing a panel over it would be Cairn
+            // interrupting a conversation it is already in.
+            //
+            // Nothing is recorded here. The announcement can still fail to
+            // land — the app may not have finished launching, or onboarding
+            // may still be holding the surfaces — and a version marked as
+            // announced before it appeared is a version that never appears.
+            // `confirmAnnounced` closes the loop from wherever it lands.
+            await announcer.announce(update)
         }
         status = .idle
     }

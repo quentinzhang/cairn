@@ -320,6 +320,7 @@ final class CairnSettings: ObservableObject {
                 settings: self,
                 languageSettings: .shared,
                 connections: .shared,
+                updateChecker: .shared,
                 close: { [weak window] in window?.performClose(nil) }
             )
         )
@@ -356,6 +357,7 @@ private struct CairnSettingsView: View {
     @ObservedObject var settings: CairnSettings
     @ObservedObject var languageSettings: LanguageSettings
     @ObservedObject var connections: AgentConnectionCenter
+    @ObservedObject var updateChecker: UpdateChecker
     var close: () -> Void = {}
 
     @Environment(\.colorScheme) private var scheme
@@ -367,7 +369,9 @@ private struct CairnSettingsView: View {
                 VStack(alignment: .leading, spacing: Cairn.Space.xl) {
                     header
                     preferences
+                    updates
                     doors
+                    feedback
                 }
                 .padding(.horizontal, Cairn.Space.xxl)
                 .padding(.bottom, Cairn.Space.xxl)
@@ -386,8 +390,8 @@ private struct CairnSettingsView: View {
     /// a row.
     ///
     /// Nothing else: a line describing what the window is for is a line nobody
-    /// reads twice, and the build number belongs where it is actionable, which
-    /// is the menu that offers to check for a newer one.
+    /// reads twice, and the build number belongs with the check that can act
+    /// on it.
     private var header: some View {
         VStack(spacing: Cairn.Space.xs) {
             CairnMark(isExpanded: true, scale: Cairn.Metrics.settingsMarkScale)
@@ -572,6 +576,71 @@ private struct CairnSettingsView: View {
                 detail: L10n.string("settings.access.detail")
             ) {
                 PermissionExperience.shared.presentCenter()
+            }
+        }
+    }
+
+    /// Updates remain actionable for people who deliberately hide the menu
+    /// bar icon. The automatic native notification is the first invitation;
+    /// this card is the reliable place to come back later.
+    private var updates: some View {
+        SettingsSection(title: L10n.string("settings.section.update")) {
+            SettingsRow(
+                title: CairnBuildInfo.displayVersion,
+                detail: updateDetail
+            ) {
+                Button(L10n.string("update.check")) {
+                    updateChecker.checkNow()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(updateChecker.status == .checking)
+            }
+
+            if let update = updateChecker.available {
+                CardDivider()
+
+                SettingsRow(
+                    title: L10n.string("update.available"),
+                    detail: L10n.format("settings.update.available.detail", update.version)
+                ) {
+                    Button(L10n.string("update.download")) {
+                        NSWorkspace.shared.open(update.installURL)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Cairn.Brand.jade)
+                    .controlSize(.small)
+                }
+            }
+        }
+    }
+
+    private var updateDetail: String {
+        switch updateChecker.status {
+        case .checking:
+            L10n.string("update.checking")
+        case .upToDate:
+            L10n.string("update.up_to_date")
+        case .failed:
+            L10n.string("update.failed")
+        case .idle:
+            L10n.string("settings.update.detail")
+        }
+    }
+
+    /// The only row that asks rather than reports.
+    ///
+    /// It sits last because it is the one thing here that is for Cairn rather
+    /// than for the person reading — and it exists at all because the product
+    /// counts nothing. A queue that phones home would not need this row; this
+    /// one does, so the row says why instead of pretending to be a feature.
+    private var feedback: some View {
+        SettingsSection(title: L10n.string("settings.section.feedback")) {
+            SettingsLinkRow(
+                title: L10n.string("settings.feedback"),
+                detail: L10n.string("settings.feedback.detail")
+            ) {
+                NSWorkspace.shared.open(CairnBuildInfo.feedbackURL)
             }
         }
     }

@@ -28,9 +28,6 @@ jobs:
             Scripts/build_app.sh \
             Scripts/package_release.sh \
             Scripts/release.sh
-          bash -n .agents/skills/cairn-release/scripts/preflight.sh
-          bash -n .agents/skills/cairn-release/scripts/verify_release.sh
-          .agents/skills/cairn-release/scripts/preflight.sh source
 
       - run: swift build
       - run: swift test

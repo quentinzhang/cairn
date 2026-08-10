@@ -89,6 +89,18 @@ right after you connect:
   between machines.
 - macOS 14+ on Apple Silicon only.
 
+### Tell me whether it helps
+
+Cairn measures nothing. No account, no analytics, no telemetry — one network
+request a day, to the GitHub Releases API, carrying no note data.
+
+That is the point of the product, and it means the only way I hear that it
+works is if you say so:
+**[Does Cairn actually help?](https://github.com/quentinzhang/cairn/discussions/1)**
+
+Three questions, answered in English, 中文, or 日本語. No sign-up, and no
+follow-up unless you want one.
+
 ## Develop from source
 
 All commands below run from the repository checkout. They do not depend on

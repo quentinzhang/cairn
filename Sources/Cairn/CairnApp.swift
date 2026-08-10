@@ -26,6 +26,14 @@ enum CairnBuildInfo {
         }
         return L10n.format("build.version_format", version, build)
     }
+
+    /// The one place Cairn asks for something back.
+    ///
+    /// The product measures nothing — no account, no analytics, no telemetry —
+    /// so a thread someone chooses to open is the only channel that exists.
+    /// Opening it carries no identifier and no note data; it is a link, not a
+    /// report.
+    static let feedbackURL = URL(string: "https://github.com/quentinzhang/cairn/discussions/1")!
 }
 
 @main
@@ -54,7 +62,7 @@ struct CairnApp: App {
                 settings: settings
             )
         )
-        let updateChecker = UpdateChecker()
+        let updateChecker = UpdateChecker.shared
         updateChecker.start()
         _updateChecker = StateObject(wrappedValue: updateChecker)
         _permissions = StateObject(wrappedValue: PermissionExperience.shared)
@@ -561,6 +569,9 @@ final class FloatingQueuePresenter: ObservableObject {
     private let notesPanel: NSPanel
     private let controlPanel: NSPanel
     private var hintPanel: NSPanel?
+    private var updatePanel: NSPanel?
+    /// An announcement that arrived before anything could show it.
+    private var pendingUpdate: AppUpdate?
     private weak var store: CompletionStore?
     private let settings: CairnSettings
     private var screenObserver: NSObjectProtocol?
@@ -570,6 +581,7 @@ final class FloatingQueuePresenter: ObservableObject {
     private var controlSizeObserver: NSObjectProtocol?
     private var shortcutObserver: NSObjectProtocol?
     private var stackingObserver: NSObjectProtocol?
+    private var updateObserver: NSObjectProtocol?
     private var hasFinishedLaunching = false
     /// While onboarding gates the app, the panels stay off screen: an ignored
     /// connect window must look like an app that has not started yet.
@@ -641,6 +653,7 @@ final class FloatingQueuePresenter: ObservableObject {
                 self.controlPanel.setFrame(self.initialControlFrame(), display: true)
                 self.syncPanels()
                 self.installShortcut()
+                self.presentPendingUpdateIfNeeded()
             }
         }
         screenObserver = NotificationCenter.default.addObserver(
@@ -670,6 +683,16 @@ final class FloatingQueuePresenter: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.beginPresentingSurfaces() }
+        }
+        updateObserver = NotificationCenter.default.addObserver(
+            forName: .cairnUpdateDidArrive,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let update = note.userInfo?[
+                CairnUpdateAnnouncement.updateKey
+            ] as? AppUpdate else { return }
+            Task { @MainActor [weak self] in self?.announceUpdate(update) }
         }
         controlSizeObserver = NotificationCenter.default.addObserver(
             forName: .cairnControlSizeDidChange,
@@ -729,10 +752,13 @@ final class FloatingQueuePresenter: ObservableObject {
         UserDefaults.standard.set(controlPanel.frame.origin.x, forKey: PreferenceKey.controlX)
         UserDefaults.standard.set(controlPanel.frame.origin.y, forKey: PreferenceKey.controlY)
         syncPanels()
-        // The introduction, if it is still standing, was placed beside a control
+        // Anything standing beside the control was placed against a control
         // that just changed shape.
         if let hintPanel {
-            hintPanel.setFrameOrigin(introductionOrigin(size: hintPanel.frame.size))
+            hintPanel.setFrameOrigin(besideControlOrigin(size: hintPanel.frame.size))
+        }
+        if let updatePanel {
+            updatePanel.setFrameOrigin(besideControlOrigin(size: updatePanel.frame.size))
         }
     }
 
@@ -745,6 +771,7 @@ final class FloatingQueuePresenter: ObservableObject {
         controlPanel.setFrame(initialControlFrame(), display: true)
         syncPanels()
         installShortcut()
+        presentPendingUpdateIfNeeded()
     }
 
     /// The shortcut is claimed only once the app is really running — never
@@ -932,7 +959,7 @@ final class FloatingQueuePresenter: ObservableObject {
         )
         panel.contentView = host
         panel.setContentSize(host.fittingSize)
-        panel.setFrameOrigin(introductionOrigin(size: host.fittingSize))
+        panel.setFrameOrigin(besideControlOrigin(size: host.fittingSize))
         hintPanel = panel
 
         panel.orderFrontRegardless()
@@ -945,11 +972,89 @@ final class FloatingQueuePresenter: ObservableObject {
         UserDefaults.standard.set(true, forKey: PreferenceKey.controlIntroduced)
         hintPanel.orderOut(nil)
         self.hintPanel = nil
+        presentPendingUpdateIfNeeded()
     }
 
-    /// Beside the control, on the side notes will appear — the introduction
-    /// stands exactly where what it describes is going to happen.
-    private func introductionOrigin(size: NSSize) -> NSPoint {
+    /// Cairn's own news, drawn by Cairn: a panel beside the stones rather than
+    /// a system notification, so the app still asks macOS for no privacy
+    /// permission at all.
+    ///
+    /// It waits rather than demands — non-activating, never key, no timeout —
+    /// which is the same bargain every note in the queue makes. The checker
+    /// already guarantees one arrival per version, so nothing here has to
+    /// defend against nagging.
+    func announceUpdate(_ update: AppUpdate) {
+        // First run outranks a version number: the introduction teaches what
+        // the stones are, and this panel would stand in the same place.
+        //
+        // Held rather than dropped. The check runs from `CairnApp.init()`, so
+        // it can answer before the app has finished launching, and onboarding
+        // can be holding every surface — neither is a reason for a version to
+        // go unannounced forever.
+        guard hasFinishedLaunching, !surfacesHeld, hintPanel == nil else {
+            pendingUpdate = update
+            return
+        }
+        pendingUpdate = nil
+        dismissUpdateAnnouncement()
+
+        let panel = NSPanel(
+            contentRect: NSRect(origin: .zero, size: .zero),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        configureBasePanel(panel)
+        panel.level = controlPanel.level
+        panel.animationBehavior = .utilityWindow
+
+        let host = NSHostingView(
+            rootView: UpdateAnnouncementView(
+                update: update,
+                onDownload: { [weak self] in
+                    NSWorkspace.shared.open(update.installURL)
+                    self?.dismissUpdateAnnouncement()
+                },
+                onDismiss: { [weak self] in
+                    self?.dismissUpdateAnnouncement()
+                }
+            )
+        )
+        panel.contentView = host
+        panel.setContentSize(host.fittingSize)
+        panel.setFrameOrigin(besideControlOrigin(size: host.fittingSize))
+        updatePanel = panel
+
+        panel.orderFrontRegardless()
+        // The queue is anchored to the same top edge, so it has to be told to
+        // move down before either is shown — otherwise the announcement lands
+        // on the newest note.
+        syncPanels()
+        panel.orderFrontRegardless()
+        controlPanel.orderFrontRegardless()
+        callAttention()
+
+        // On screen: only now is this version spent.
+        UpdateChecker.shared.confirmAnnounced(update.version)
+    }
+
+    /// Show whatever was held back, once the reason for holding it is gone.
+    private func presentPendingUpdateIfNeeded() {
+        guard let pendingUpdate else { return }
+        announceUpdate(pendingUpdate)
+    }
+
+    func dismissUpdateAnnouncement() {
+        guard let updatePanel else { return }
+        updatePanel.orderOut(nil)
+        self.updatePanel = nil
+        // The band is free again; the queue takes it back.
+        syncPanels()
+    }
+
+    /// Beside the control, on the side notes will appear — anything Cairn
+    /// says for itself stands exactly where what it describes happens.
+    private func besideControlOrigin(size: NSSize) -> NSPoint {
         let controlFrame = controlPanel.frame
         let screen = NSScreen.screens.first(where: { $0.frame.intersects(controlFrame) })
             ?? activeScreen()
@@ -1082,9 +1187,28 @@ final class FloatingQueuePresenter: ObservableObject {
             NoteQueue.maximumHeight,
             max(
                 NoteQueue.minimumHeight,
-                visibleFrame.height - Cairn.Metrics.screenMargin * 2
+                visibleFrame.height - Cairn.Metrics.screenMargin * 2 - announcementReservedHeight
             )
         )
+    }
+
+    /// The band the update panel holds at the top of the column, so the queue
+    /// starts below it instead of underneath it.
+    ///
+    /// Both are anchored to the top of the control — that is what puts a note
+    /// where the stones are — so without this reservation the announcement
+    /// lands exactly on the newest note. Zero whenever no announcement is up,
+    /// which is almost always.
+    ///
+    /// The panel's frame is larger than the card drawn inside it (`Space.md`
+    /// all round, for the shadow) and the queue insets its own content by
+    /// `Space.lg`. Subtracting that inset lands the two cards exactly
+    /// `noteCardSpacing` apart — the same rhythm notes keep with each other,
+    /// which is what makes the announcement read as the top of one column
+    /// rather than a second floating thing.
+    private var announcementReservedHeight: CGFloat {
+        guard let updatePanel, updatePanel.isVisible else { return 0 }
+        return max(0, updatePanel.frame.height - Cairn.Space.lg)
     }
 
     private func initialControlFrame() -> NSRect {
@@ -1139,10 +1263,10 @@ final class FloatingQueuePresenter: ObservableObject {
         let x = hasRoomOnLeft
             ? controlFrame.minX - size.width - gap
             : min(controlFrame.maxX + gap, visibleFrame.maxX - size.width - margin)
-        let preferredY = controlFrame.maxY - size.height
+        let preferredY = controlFrame.maxY - size.height - announcementReservedHeight
         let y = min(
             max(preferredY, visibleFrame.minY + margin),
-            visibleFrame.maxY - size.height - margin
+            visibleFrame.maxY - size.height - margin - announcementReservedHeight
         )
 
         return NSRect(x: x, y: y, width: size.width, height: size.height)
@@ -1615,6 +1739,108 @@ private struct ControlIntroductionView: View {
             RoundedRectangle(cornerRadius: Cairn.Radius.card, style: .continuous)
                 .strokeBorder(Cairn.Stroke.controlResting(scheme), lineWidth: Cairn.Stroke.width)
         )
+        .cairnShadow(.note(scheme))
+        .padding(Cairn.Space.md)
+    }
+}
+
+/// Cairn's own news, in the queue's clothes. It borrows the introduction's
+/// card exactly — same material, same border, same shadow — because a panel
+/// that looked like a system banner would be claiming an authority the app
+/// deliberately does not have.
+///
+/// Jade on Download and nowhere else: jade is the one hue Cairn speaks in
+/// about itself, and every other colour on this desktop belongs to an agent.
+private struct UpdateAnnouncementView: View {
+    @Environment(\.colorScheme) private var scheme
+    let update: AppUpdate
+    let onDownload: () -> Void
+    let onDismiss: () -> Void
+
+    private var tone: Cairn.Tone { .cairn }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Cairn.Space.md) {
+            // A note's header without the glyph: the jade rail already says
+            // who is speaking, the same way an agent's rail does, and the
+            // three-stone mark is illegible at an agent glyph's size.
+            HStack(spacing: Cairn.Space.xs) {
+                Text(verbatim: "Cairn")
+                    .font(Cairn.Typo.label)
+                    .foregroundStyle(tone.label(scheme))
+
+                Text("· \(L10n.string("update.available"))")
+                    .font(Cairn.Typo.label)
+                    .foregroundStyle(Cairn.Ink.tertiary)
+            }
+
+            // Wrap rather than truncate: the panel takes its width from this
+            // view, and a measured single line ends in "…".
+            Text(L10n.format("update.notification.body", update.version))
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: Cairn.Space.md) {
+                Spacer()
+
+                // Later stays text: the panel already goes away on its own
+                // terms, and two filled buttons would make a dialog out of a
+                // note.
+                Button(L10n.string("update.later"), action: onDismiss)
+                    .buttonStyle(.borderless)
+                    .font(Cairn.Typo.label)
+                    .foregroundStyle(Cairn.Ink.tertiary)
+
+                // A shape, not just a colour: bare jade text on a jade wash is
+                // a tint, not an affordance. Filled and bordered in jade, with
+                // a jade label — white on jade belongs to Settings, where the
+                // button sits on an opaque sheet rather than on a translucent
+                // card over the wallpaper.
+                Button(action: onDownload) {
+                    Text(L10n.string("update.download"))
+                        .font(Cairn.Typo.label)
+                        .foregroundStyle(tone.label(scheme))
+                        .padding(.horizontal, Cairn.Space.md)
+                        .padding(.vertical, Cairn.Space.xs)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(tone.rail(scheme).opacity(0.18))
+                        )
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .strokeBorder(
+                                    tone.rail(scheme).opacity(0.45),
+                                    lineWidth: Cairn.Stroke.width
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .font(Cairn.Typo.meta)
+        .foregroundStyle(Cairn.Ink.body)
+        .padding(Cairn.Space.lg)
+        .frame(width: Cairn.Metrics.notePanelWidth - Cairn.Space.lg * 2, alignment: .leading)
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: Cairn.Radius.card, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: Cairn.Radius.card, style: .continuous)
+                    .fill(tone.wash(scheme))
+            }
+        }
+        .overlay(alignment: .leading) {
+            Capsule()
+                .fill(tone.rail(scheme))
+                .frame(
+                    width: Cairn.Metrics.noteRailWidth,
+                    height: Cairn.Metrics.noteRailHeight
+                )
+                .padding(.leading, Cairn.Space.xs)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: Cairn.Radius.card, style: .continuous)
+                .strokeBorder(tone.rail(scheme).opacity(0.55), lineWidth: Cairn.Stroke.width)
+        }
         .cairnShadow(.note(scheme))
         .padding(Cairn.Space.md)
     }

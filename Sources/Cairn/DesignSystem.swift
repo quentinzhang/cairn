@@ -285,6 +285,22 @@ extension Cairn {
             washDark: 0.16
         )
 
+        /// Cairn's own jade — the one tone that belongs to no agent.
+        ///
+        /// Reserved by the same reasoning that took teal away from Codex
+        /// (see `codex`): a jade card reads as a message from the app itself.
+        /// That is exactly what it is used for, and it is why nothing else on
+        /// this desktop may wear it.
+        static let cairn = Tone(
+            hue: Brand.jade,
+            railLight: Color(hex: 0x14806F),
+            railDark: Brand.jadeGlow,
+            labelLight: Brand.jadeDeep,
+            labelDark: Color(hex: 0x6FD8C4),
+            washLight: 0.10,
+            washDark: 0.16
+        )
+
         /// Any source Cairn has not been taught yet.
         static let unknown = Tone(
             hue: Color(hex: 0xD18529),
@@ -408,7 +424,12 @@ extension Cairn {
         /// The settings window. Nothing in it reflows — it is a sheet of
         /// switches, not a document — so the size is tuned here like the
         /// control's rather than left to the content.
-        static let settingsWindow = CGSize(width: 520, height: 740)
+        ///
+        /// Tuned to hold every section without scrolling. A switch that has to
+        /// be scrolled to is a switch nobody finds, and the last section is the
+        /// one asking whether any of this helps — the row that most needs to be
+        /// seen sits furthest down. Adding a section means re-tuning this.
+        static let settingsWindow = CGSize(width: 520, height: 860)
         /// The mark that heads that window, as a multiple of the one the
         /// desktop control draws. Large enough to read as the product's face,
         /// not so large that the switches start below the fold.

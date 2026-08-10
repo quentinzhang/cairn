@@ -38,7 +38,9 @@
 "menu.settings" = "设置…";
 "settings.window.title" = "Cairn 设置";
 "settings.section.preferences" = "偏好设置";
+"settings.section.update" = "更新";
 "settings.section.setup" = "配置";
+"settings.section.feedback" = "反馈";
 "settings.done" = "完成";
 "settings.open" = "打开";
 "settings.launch_at_login" = "开机启动";
@@ -63,6 +65,10 @@
 "settings.shortcut.unavailable" = "这组按键已被其他应用占用，请换一组。";
 "settings.apps.detail" = "连接那些完成任务后会留下便签的编程 Agent。";
 "settings.access.detail" = "授予权限，让点击能精确回到那个标签页、窗口或会话。";
+"settings.update.detail" = "Cairn 每天检查一次更新，由你决定何时下载。";
+"settings.update.available.detail" = "Cairn %@ 已可下载。";
+"settings.feedback" = "告诉我它有没有用";
+"settings.feedback.detail" = "Cairn 不做任何统计。你愿意开口的地方，是我唯一能听见回音的地方。";
 
 "update.available" = "有新版本";
 "update.version_format" = "Cairn %@";
@@ -71,6 +77,9 @@
 "update.checking" = "正在检查…";
 "update.up_to_date" = "已是最新版本";
 "update.failed" = "无法检查更新";
+"update.download" = "下载";
+"update.later" = "以后再说";
+"update.notification.body" = "Cairn %@ 已可下载。";
 
 "relative.now" = "刚刚";
 "relative.minutes" = "%d分";

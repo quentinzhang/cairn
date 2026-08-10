@@ -75,6 +75,11 @@ extension Notification.Name {
     /// The app may show its surfaces without any introduction — an upgrade
     /// arrived already connected, so there was no first run to finish.
     static let cairnAppShouldStart = Notification.Name("app.cairn.appShouldStart")
+    /// A newer release was found by the automatic check, and this version has
+    /// not announced itself before. The desktop control answers by drawing a
+    /// panel beside the stones. Carries the `AppUpdate` under
+    /// `CairnUpdateAnnouncement.updateKey`.
+    static let cairnUpdateDidArrive = Notification.Name("app.cairn.updateDidArrive")
 }
 
 /// Where every packaged resource is read from — strings, agent icons, anything
