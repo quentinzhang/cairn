@@ -20,6 +20,13 @@
 "note.dismiss_stack" = "Dismiss every note in this stack";
 "note.stack.expand" = "Show all %d notes from here";
 "note.stack.collapse" = "Stack these notes again";
+"note.search" = "Search these notes";
+"note.search.placeholder" = "Search";
+"note.search.clear" = "Clear the search";
+"note.search.empty" = "No notes match your search";
+"note.clear_all.confirm" = "Clear all %d notes?";
+"note.clear_all.confirm.yes" = "Clear";
+"note.clear_all.confirm.no" = "Cancel";
 "menu.collapse_notes" = "Collapse notes";
 "menu.expand_notes" = "Expand notes";
 "menu.clear" = "Clear";

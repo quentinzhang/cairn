@@ -363,8 +363,16 @@ Six roles. Adding a seventh needs a reason.
 | `Typo.meta` | `.caption` | workspace, status, secondary rows |
 | `Typo.micro` | `.caption2` | relative time |
 
-Plus two non-prose faces: `badge` (9pt bold rounded — it sits on the mark,
-not in text) and `glyph` (9pt bold, for `×` inside circular targets).
+Plus three non-prose faces: `badge` (9pt bold rounded — it sits on the mark,
+not in text), `glyph` (9pt bold, for `×` inside circular targets) and
+`chromeGlyph` (11pt semibold).
+
+`chromeGlyph` earns the split from `glyph` on target size and on what the
+symbol has to do. `glyph` is tuned to survive being tiny inside a 19pt circle,
+and it is only ever asked to draw an `×` or a chevron — shapes that read at any
+weight. The queue's own control row sits in 26pt targets and carries symbols
+that have to be legible as *pictures*: a magnifier, a stack with something
+taken off it. At 9pt bold those become smudges.
 
 Everything except `noteBody` maps to a Dynamic Type style, so the app tracks
 the user's text size. `noteBody` is fixed because the card is fixed height.

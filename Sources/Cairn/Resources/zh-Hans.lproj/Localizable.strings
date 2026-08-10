@@ -20,6 +20,13 @@
 "note.dismiss_stack" = "移除这一摞便签";
 "note.stack.expand" = "展开这里的全部 %d 条便签";
 "note.stack.collapse" = "重新叠起这些便签";
+"note.search" = "搜索这些便签";
+"note.search.placeholder" = "搜索";
+"note.search.clear" = "清除搜索内容";
+"note.search.empty" = "没有匹配的便签";
+"note.clear_all.confirm" = "确定清除全部 %d 条便签？";
+"note.clear_all.confirm.yes" = "清除";
+"note.clear_all.confirm.no" = "取消";
 "menu.collapse_notes" = "收起便签";
 "menu.expand_notes" = "展开便签";
 "menu.clear" = "清空";

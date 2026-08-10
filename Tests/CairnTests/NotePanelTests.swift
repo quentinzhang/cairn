@@ -16,6 +16,35 @@ func theNotePanelIsOpaqueToTheMouseEverywhere() {
     #expect(alpha <= 0.02)
 }
 
+/// Cairn had no text input at all until the queue grew a search field, and a
+/// borderless window refuses key status by default — so the caret would simply
+/// never appear, silently, with everything else working. These three facts are
+/// what make it appear, and what keep the cost of it off the app in front.
+@Test
+@MainActor
+func theNotePanelCanTakeAKeystrokeWithoutTakingTheForeground() {
+    let panel = CairnNotesPanel(
+        contentRect: NSRect(x: 0, y: 0, width: 100, height: 100),
+        styleMask: [.borderless, .nonactivatingPanel],
+        backing: .buffered,
+        defer: false
+    )
+    panel.becomesKeyOnlyIfNeeded = true
+
+    // Without the override this is false, and the field can never hold focus.
+    #expect(panel.canBecomeKey)
+    // Non-activating is what makes granting that safe: key status moves here,
+    // Cairn does not come forward, and the app being worked in keeps its menu
+    // bar. A queue that pulled focus to be read would interrupt exactly the
+    // work it exists to stay out of.
+    #expect(panel.styleMask.contains(.nonactivatingPanel))
+    // And only a click on something that wants first responder moves it, so
+    // clicking a card to follow its trail still costs the foreground nothing.
+    #expect(panel.becomesKeyOnlyIfNeeded)
+    // Main is a different thing again, and a floating panel is never it.
+    #expect(!panel.canBecomeMain)
+}
+
 private func note(
     id: String = UUID().uuidString,
     source: String = "codex",
@@ -23,6 +52,8 @@ private func note(
     cwd: String = "/Users/someone/Cairn",
     platform: String? = nil,
     locator: CairnLocator? = nil,
+    result: String = "Done",
+    userMessage: String? = nil,
     minutesAgo: Int = 0
 ) -> CodexCompletion {
     CodexCompletion(
@@ -33,11 +64,11 @@ private func note(
         turnID: nil,
         cwd: cwd,
         title: "Completed",
-        result: "Done",
+        result: result,
         status: "completed",
         timestamp: Date(timeIntervalSince1970: 10_000 - Double(minutesAgo) * 60),
         source: source,
-        userMessage: nil,
+        userMessage: userMessage,
         model: nil,
         platform: platform,
         locator: locator
@@ -232,18 +263,77 @@ func aStackCostsItsShouldersClosedAndEveryCardOpen() {
 
 /// The pill that clears everything is priced against rows, not notes: five
 /// notes gathered into one stack are one × away, and that is not work worth a
-/// second control.
+/// second control. The field that searches them is priced the other way, for
+/// the same reason read from the other end — those five notes are five things
+/// to read, whichever row they are folded into.
 @Test
-func clearingAllIsOfferedOnceThereAreRowsToClear() {
-    #expect(!NoteQueue.showsClearAll(for: 2))
-    #expect(NoteQueue.showsClearAll(for: 3))
+func theQueueEarnsItsControlsOnDifferentCounts() {
+    #expect(!NoteQueue.chrome(noteCount: 2, rowCount: 2, isFiltering: false).showsClearAll)
+    #expect(NoteQueue.chrome(noteCount: 3, rowCount: 3, isFiltering: false).showsClearAll)
 
-    let pile = NoteQueue.stacks(
-        for: (0..<5).map { note(sessionID: "one-project-\($0)", minutesAgo: $0) },
-        stacking: true
+    let pile = NoteQueue.chrome(noteCount: 5, rowCount: 1, isFiltering: false)
+    #expect(!pile.showsClearAll)
+    #expect(pile.showsHeader)
+
+    // Two notes are read faster than a query is typed.
+    #expect(!NoteQueue.chrome(noteCount: 2, rowCount: 2, isFiltering: false).showsHeader)
+}
+
+/// Two controls, one row, and only one of them may stand in it at a time.
+///
+/// "Clear all" mid-search would have to mean either the matches or the queue
+/// behind them, and the outcome is not undoable — so it leaves rather than
+/// picks. The field it leaves for cannot be taken away by its own results:
+/// narrowing to nothing, or dismissing the last rows while filtering, has to
+/// leave something to type into.
+@Test
+func searchingTakesTheRowAndKeepsIt() {
+    let filtering = NoteQueue.chrome(noteCount: 9, rowCount: 2, isFiltering: true)
+    #expect(filtering.showsHeader)
+    #expect(!filtering.showsClearAll)
+    #expect(!filtering.showsEmptyResult)
+
+    let nothingFound = NoteQueue.chrome(noteCount: 9, rowCount: 0, isFiltering: true)
+    #expect(nothingFound.showsHeader)
+    #expect(nothingFound.showsEmptyResult)
+
+    // Dismissed down below the threshold with a query still live.
+    #expect(NoteQueue.chrome(noteCount: 1, rowCount: 1, isFiltering: true).showsHeader)
+    // And an empty result is a search's answer, never a queue's.
+    #expect(!NoteQueue.chrome(noteCount: 0, rowCount: 0, isFiltering: false).showsEmptyResult)
+}
+
+/// The panel is sized before a card exists, so every row the view can draw has
+/// to be in the arithmetic — including the one that says nothing was found.
+@Test
+func theHeaderAndTheEmptyAnswerAreBothPaidFor() {
+    let stacks = NoteQueue.stacks(for: (0..<3).map { note(minutesAgo: $0) }, stacking: false)
+    let bare = NoteQueue.contentHeight(for: stacks)
+    let withHeader = NoteQueue.contentHeight(
+        for: stacks,
+        chrome: NoteQueue.QueueChrome(showsHeader: true, showsClearAll: true)
     )
-    #expect(pile.count == 1)
-    #expect(!NoteQueue.showsClearAll(for: pile.count))
+    #expect(withHeader - bare == NoteQueue.chromeRowHeight)
+
+    // Clearing and searching share the row, so the second one is free.
+    #expect(
+        NoteQueue.contentHeight(
+            for: stacks,
+            chrome: NoteQueue.QueueChrome(showsHeader: true, showsClearAll: false)
+        ) == withHeader
+    )
+
+    let empty = NoteQueue.contentHeight(
+        for: [],
+        chrome: NoteQueue.QueueChrome(showsHeader: true, showsEmptyResult: true)
+    )
+    #expect(
+        empty == NoteQueue.chromeRowHeight
+            + Cairn.Metrics.noteEmptyResultHeight
+            + NoteQueue.verticalPadding
+    )
+    // Smaller than a single card: the panel shrinking is part of the answer.
+    #expect(empty < NoteQueue.contentHeight(for: Array(stacks.prefix(1))))
 }
 
 /// Two sizes, one multiplier: every part of the desktop control is derived

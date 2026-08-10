@@ -20,6 +20,13 @@
 "note.dismiss_stack" = "この重なりのノートをすべて消す";
 "note.stack.expand" = "ここの%d件のノートをすべて表示";
 "note.stack.collapse" = "ノートを重ね直す";
+"note.search" = "このノートを検索";
+"note.search.placeholder" = "検索";
+"note.search.clear" = "検索内容を消去";
+"note.search.empty" = "一致するノートはありません";
+"note.clear_all.confirm" = "%d件のノートをすべて消しますか？";
+"note.clear_all.confirm.yes" = "消す";
+"note.clear_all.confirm.no" = "キャンセル";
 "menu.collapse_notes" = "ノートを閉じる";
 "menu.expand_notes" = "ノートを開く";
 "menu.clear" = "すべて消す";
