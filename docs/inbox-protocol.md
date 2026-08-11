@@ -266,6 +266,12 @@ Automation), granted from **Access** in the menu bar. Without it, a click
 degrades to activating the app, then to Finder. Cairn never raises a permission
 prompt from an ordinary note click.
 
+For a captured VS Code/Cursor host, a stale extension-host PID, an unreadable
+editor status report, or a failed exact Accessibility match stays on the editor
+route: Cairn falls back to the recorded app and workspace-title hints. Finder is
+used only after no GUI host can be resolved, never as the fallback for a known
+running editor.
+
 ## 8. Reliability rules for producers
 
 These are non-negotiable, and every bundled bridge follows them:

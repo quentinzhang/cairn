@@ -112,6 +112,33 @@ func looksForAnAgentAppWhereMacsKeepThem() {
 }
 
 @Test
+func editorStatusMapsAnExtensionHostToItsLiveWindowTitle() {
+    let status = """
+        CPU %  Mem MB  PID  Process
+          0       0   55455  window [4] (Bash tool output (r9l8qc) — consolex-ai (工作区))
+          0       0   55476  extension-host [4]
+          0       0   64258  window [6] (MCPAnyinstallHome.tsx — hostingmcp (工作区))
+          0       0   71481  extension-host [6]
+        """
+
+    #expect(
+        TrailFinder.editorWindowTitle(in: status, forExtensionHostPID: 55476)
+            == "Bash tool output (r9l8qc) — consolex-ai (工作区)"
+    )
+    #expect(
+        TrailFinder.editorWindowTitle(in: status, forExtensionHostPID: 71481)
+            == "MCPAnyinstallHome.tsx — hostingmcp (工作区)"
+    )
+}
+
+@Test
+func editorStatusDoesNotGuessForAnUnknownOrIncompleteExtensionHost() {
+    let incomplete = "  0  0  55476  extension-host [4]\n"
+    #expect(TrailFinder.editorWindowTitle(in: incomplete, forExtensionHostPID: 55476) == nil)
+    #expect(TrailFinder.editorWindowTitle(in: incomplete, forExtensionHostPID: 99999) == nil)
+}
+
+@Test
 func recognizesBothCurrentDesktopBundleNames() {
     let chatGPT = CairnLocator(
         termProgram: nil,

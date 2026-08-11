@@ -11,9 +11,9 @@ import os
 ///
 /// 1. Apple Terminal — match the session's tty against every tab (AppleScript).
 /// 2. iTerm2 — match the session UUID from `ITERM_SESSION_ID` (AppleScript).
-/// 3. Any GUI host (VS Code, Cursor, a desktop client…) — activate the exact
-///    app the turn ran under, and if Accessibility is granted, raise the
-///    window whose title mentions the working directory.
+/// 3. VS Code/Cursor — use the captured extension-host pid and the editor's
+///    live status report to focus its exact window. Other GUI hosts activate
+///    their app and, with Accessibility, match a workspace hint in its title.
 /// 4. Last resort — reveal the working directory in Finder, so a click always
 ///    lands somewhere.
 ///
@@ -383,6 +383,39 @@ enum TrailFinder {
         }
 
         if let app = hostApp(locator) {
+            // VS Code-family agents run below one extension-host per editor
+            // window. The locator already records that host pid, whereas a
+            // workspace-name search is only a guess: an editor window title
+            // can name its current file, a renamed workspace, or nothing from
+            // `cwd` at all. Ask the editor which live window owns that exact
+            // extension host, then focus only an unambiguous AX match.
+            if let editorStatusExecutable = editorStatusExecutable(for: app) {
+                if let title = await editorWindowTitle(
+                    forExtensionHostPID: locator?.hostAppPID,
+                    statusExecutable: editorStatusExecutable
+                ) {
+                    if app.isHidden { app.unhide() }
+                    unminimizeWindows(of: app)
+                    if raiseWindow(of: app, titledExactly: title) {
+                        app.activate()
+                        return
+                    }
+                }
+
+                // Status output, extension-host lifetime, and Accessibility
+                // availability can all change after the note was captured.
+                // Those are failures of exact *window* selection, not evidence
+                // that the recorded editor stopped being the destination.
+                // Stay inside that VS Code/Cursor instance: try the workspace
+                // title fallback, then at minimum activate the recorded app.
+                // Finder is reserved for trails with no resolvable GUI host.
+                if app.isHidden { app.unhide() }
+                unminimizeWindows(of: app)
+                raiseBestWindow(of: app, matching: workspaceHints(for: completion))
+                app.activate()
+                return
+            }
+
             if app.isHidden { app.unhide() }
             unminimizeWindows(of: app)
             raiseBestWindow(of: app, matching: workspaceHints(for: completion))
@@ -734,6 +767,120 @@ enum TrailFinder {
         return NSWorkspace.shared.runningApplications.first { $0.bundleURL?.path == bundlePath }
     }
 
+    /// The bundled CLI reports the live association from an extension-host pid
+    /// to its editor window. Keep the executable inside the recorded bundle:
+    /// a PATH lookup could address a different VS Code channel or Cursor copy.
+    private static func editorStatusExecutable(for app: NSRunningApplication) -> URL? {
+        guard let bundleURL = app.bundleURL else { return nil }
+        let name = bundleURL.lastPathComponent.lowercased()
+        let bundleID = app.bundleIdentifier?.lowercased() ?? ""
+        let isVSCodeFamily = name.contains("visual studio code")
+            || name == "code.app"
+            || name.contains("cursor")
+            || bundleID == "com.microsoft.vscode"
+            || bundleID == "com.microsoft.vscodeinsiders"
+            || bundleID == "com.todesktop.230313mzl4w4u92"
+        guard isVSCodeFamily else { return nil }
+
+        let bin = bundleURL
+            .appendingPathComponent("Contents/Resources/app/bin", isDirectory: true)
+        let candidates = name.contains("cursor") ? ["cursor", "code"] : ["code", "cursor"]
+        return candidates
+            .map { bin.appendingPathComponent($0) }
+            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
+    }
+
+    /// `code --status` is intentionally sampled at click time: a window title
+    /// changes with the active editor, while the extension-host pid continues
+    /// to name the same window for its lifetime.
+    private static func editorWindowTitle(
+        forExtensionHostPID pid: Int?,
+        statusExecutable: URL
+    ) async -> String? {
+        guard let pid, pid > 1 else { return nil }
+        let executablePath = statusExecutable.path
+        let status = await Task.detached(priority: .userInitiated) {
+            runEditorStatus(executablePath: executablePath)
+        }.value
+        guard let status else { return nil }
+        return editorWindowTitle(in: status, forExtensionHostPID: pid)
+    }
+
+    /// Parse only the two records that form the association. The rest of the
+    /// human-readable status report is deliberately ignored so its CPU and
+    /// memory columns can change without affecting trail-back.
+    nonisolated static func editorWindowTitle(in status: String, forExtensionHostPID pid: Int) -> String? {
+        let hostPattern = #"\b(\d+)\s+extension-host\s+\[(\d+)\]\s*$"#
+        let windowPattern = #"\bwindow\s+\[(\d+)\]\s+\((.*)\)\s*$"#
+        guard let hostExpression = try? NSRegularExpression(pattern: hostPattern),
+              let windowExpression = try? NSRegularExpression(pattern: windowPattern) else {
+            return nil
+        }
+
+        var titlesByWindowID: [String: String] = [:]
+        var targetWindowID: String?
+        for line in status.split(whereSeparator: \.isNewline).map(String.init) {
+            let range = NSRange(line.startIndex..., in: line)
+            if let match = windowExpression.firstMatch(in: line, range: range),
+               let idRange = Range(match.range(at: 1), in: line),
+               let titleRange = Range(match.range(at: 2), in: line) {
+                titlesByWindowID[String(line[idRange])] = String(line[titleRange])
+                continue
+            }
+            if let match = hostExpression.firstMatch(in: line, range: range),
+               let pidRange = Range(match.range(at: 1), in: line),
+               Int(line[pidRange]) == pid,
+               let idRange = Range(match.range(at: 2), in: line) {
+                targetWindowID = String(line[idRange])
+            }
+        }
+        return targetWindowID.flatMap { titlesByWindowID[$0] }
+    }
+
+    /// The status report can include enough workspace statistics to fill a
+    /// pipe on a large checkout. Capture it in a 0600 temporary file and cap
+    /// the synchronous child process so a note click never blocks indefinitely.
+    nonisolated private static func runEditorStatus(executablePath: String) -> String? {
+        let manager = FileManager.default
+        let output = manager.temporaryDirectory
+            .appendingPathComponent("cairn-editor-status-\(UUID().uuidString)")
+        guard manager.createFile(
+            atPath: output.path,
+            contents: nil,
+            attributes: [.posixPermissions: 0o600]
+        ), let handle = try? FileHandle(forWritingTo: output) else {
+            return nil
+        }
+        defer {
+            try? handle.close()
+            try? manager.removeItem(at: output)
+        }
+
+        let process = Process()
+        let finished = DispatchSemaphore(value: 0)
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = ["--status"]
+        process.standardOutput = handle
+        process.standardError = FileHandle.nullDevice
+        process.terminationHandler = { _ in finished.signal() }
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+        guard finished.wait(timeout: .now() + 3) == .success else {
+            process.terminate()
+            _ = finished.wait(timeout: .now() + 1)
+            return nil
+        }
+        guard process.terminationStatus == 0,
+              let data = try? Data(contentsOf: output),
+              let status = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return status
+    }
+
     /// Window titles usually carry the project folder: VS Code shows
     /// "file — folder", terminals show paths. Try the cwd leaf first, then
     /// its parents, so a turn run in a subdirectory still matches the
@@ -804,6 +951,27 @@ enum TrailFinder {
                 return
             }
         }
+    }
+
+    /// The title comes from the editor's own process tree, not from a folder
+    /// name heuristic. Refuse duplicate matches rather than choosing a window
+    /// based on Accessibility enumeration order.
+    private static func raiseWindow(of app: NSRunningApplication, titledExactly target: String) -> Bool {
+        guard !target.isEmpty, AXIsProcessTrusted() else { return false }
+
+        let element = AXUIElementCreateApplication(app.processIdentifier)
+        var windowsRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXWindowsAttribute as CFString, &windowsRef) == .success,
+              let windows = windowsRef as? [AXUIElement] else { return false }
+
+        let matches = windows.filter { window in
+            var titleRef: CFTypeRef?
+            return AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &titleRef) == .success
+                && (titleRef as? String) == target
+        }
+        guard matches.count == 1, let window = matches.first else { return false }
+        focusWindow(window, of: element)
+        return true
     }
 
     /// Bring one window to the front of its app *and* make the app treat it as
