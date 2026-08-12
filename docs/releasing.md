@@ -67,12 +67,17 @@ changes.
 
 ## Publish a new App version
 
-AI agents must use the repository release skill instead of reconstructing the
-workflow from memory:
+AI agents must use the maintainer's release skill instead of reconstructing
+the workflow from memory:
 
 ```text
 .agents/skills/cairn-release/SKILL.md
 ```
+
+The `.agents/` directory is a maintainer-local toolset and is not distributed
+with this repository, so these paths do not exist in a fresh clone. Publishing
+requires the maintainer's signing identity and App Store Connect credentials;
+this section applies only to the maintainer's machine.
 
 Run its read-only gates before mutating the release:
 

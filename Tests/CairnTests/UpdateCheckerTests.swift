@@ -15,6 +15,15 @@ private struct StubReleaseClient: ReleaseChecking {
     }
 }
 
+@MainActor
+private final class RecordingAnnouncer: UpdateAnnouncing {
+    private(set) var announcedVersions: [String] = []
+
+    func announce(_ update: AppUpdate) async {
+        announcedVersions.append(update.version)
+    }
+}
+
 private func isolatedDefaults() -> UserDefaults {
     let suite = "CairnTests.UpdateChecker.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!
@@ -117,4 +126,112 @@ func skipPersistsButAnExplicitCheckCanRevealTheVersionAgain() async {
 
     await relaunched.checkNow()?.value
     #expect(relaunched.available?.version == "0.7.0")
+}
+
+@Test @MainActor
+func automaticDiscoveryAnnouncesAnUpdateOncePerVersion() async {
+    let defaults = isolatedDefaults()
+    let announcer = RecordingAnnouncer()
+    let checker = UpdateChecker(
+        client: StubReleaseClient(release: newerRelease),
+        preferences: defaults,
+        currentVersion: { "0.6.3" },
+        announcer: announcer
+    )
+
+    await checker.checkIfDue()?.value
+    #expect(announcer.announcedVersions == ["0.7.0"])
+    // Spending the version is the presenter's job, once it is actually drawn.
+    checker.confirmAnnounced("0.7.0")
+
+    defaults.removeObject(forKey: "cairn.update.lastCheckDate")
+    await checker.checkIfDue()?.value
+    #expect(announcer.announcedVersions == ["0.7.0"])
+}
+
+/// An announcement that never reached a screen is not spent. The check runs
+/// from `CairnApp.init()`, so it can answer before the app has finished
+/// launching, and onboarding can be holding every surface — if either counted
+/// as announced, that version would never be seen at all.
+@Test @MainActor
+func anUnconfirmedAnnouncementIsTriedAgain() async {
+    let defaults = isolatedDefaults()
+    let announcer = RecordingAnnouncer()
+    let checker = UpdateChecker(
+        client: StubReleaseClient(release: newerRelease),
+        preferences: defaults,
+        currentVersion: { "0.6.3" },
+        announcer: announcer
+    )
+
+    await checker.checkIfDue()?.value
+    #expect(announcer.announcedVersions == ["0.7.0"])
+
+    // No confirmation: nothing drew it.
+    defaults.removeObject(forKey: "cairn.update.lastCheckDate")
+    await checker.checkIfDue()?.value
+    #expect(announcer.announcedVersions == ["0.7.0", "0.7.0"])
+}
+
+/// A confirmation outlives the process — the whole reason it is a preference
+/// and not a flag on the checker.
+@Test @MainActor
+func aConfirmedAnnouncementStaysSpentAcrossRelaunch() async {
+    let defaults = isolatedDefaults()
+    let first = UpdateChecker(
+        client: StubReleaseClient(release: newerRelease),
+        preferences: defaults,
+        currentVersion: { "0.6.3" },
+        announcer: RecordingAnnouncer()
+    )
+    await first.checkIfDue()?.value
+    first.confirmAnnounced("0.7.0")
+
+    let announcer = RecordingAnnouncer()
+    let relaunched = UpdateChecker(
+        client: StubReleaseClient(release: newerRelease),
+        preferences: defaults,
+        currentVersion: { "0.6.3" },
+        announcer: announcer
+    )
+    defaults.removeObject(forKey: "cairn.update.lastCheckDate")
+    await relaunched.checkIfDue()?.value
+    #expect(announcer.announcedVersions.isEmpty)
+}
+
+/// The panel is the automatic path's job alone. A manual check already puts
+/// the answer on screen — in the menu row and in Settings — so drawing a panel
+/// on top of it would be Cairn interrupting a conversation it is already in.
+@Test @MainActor
+func aManualCheckNeverAnnouncesItself() async {
+    let defaults = isolatedDefaults()
+    let announcer = RecordingAnnouncer()
+    let checker = UpdateChecker(
+        client: StubReleaseClient(release: newerRelease),
+        preferences: defaults,
+        currentVersion: { "0.6.3" },
+        announcer: announcer
+    )
+
+    await checker.checkNow()?.value
+    #expect(checker.available?.version == "0.7.0")
+    #expect(announcer.announcedVersions.isEmpty)
+}
+
+/// A version the user has already turned down stays turned down: the panel is
+/// once per version, and skipping is the stronger signal.
+@Test @MainActor
+func aSkippedVersionNeverAnnouncesItself() async {
+    let defaults = isolatedDefaults()
+    defaults.set("0.7.0", forKey: "cairn.update.skippedVersion")
+    let announcer = RecordingAnnouncer()
+    let checker = UpdateChecker(
+        client: StubReleaseClient(release: newerRelease),
+        preferences: defaults,
+        currentVersion: { "0.6.3" },
+        announcer: announcer
+    )
+
+    await checker.checkIfDue()?.value
+    #expect(announcer.announcedVersions.isEmpty)
 }

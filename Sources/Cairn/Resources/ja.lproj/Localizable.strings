@@ -20,6 +20,13 @@
 "note.dismiss_stack" = "この重なりのノートをすべて消す";
 "note.stack.expand" = "ここの%d件のノートをすべて表示";
 "note.stack.collapse" = "ノートを重ね直す";
+"note.search" = "このノートを検索";
+"note.search.placeholder" = "検索";
+"note.search.clear" = "検索内容を消去";
+"note.search.empty" = "一致するノートはありません";
+"note.clear_all.confirm" = "%d件のノートをすべて消しますか？";
+"note.clear_all.confirm.yes" = "消す";
+"note.clear_all.confirm.no" = "キャンセル";
 "menu.collapse_notes" = "ノートを閉じる";
 "menu.expand_notes" = "ノートを開く";
 "menu.clear" = "すべて消す";
@@ -31,7 +38,9 @@
 "menu.settings" = "設定…";
 "settings.window.title" = "Cairn 設定";
 "settings.section.preferences" = "環境設定";
+"settings.section.update" = "アップデート";
 "settings.section.setup" = "セットアップ";
+"settings.section.feedback" = "フィードバック";
 "settings.done" = "完了";
 "settings.open" = "開く";
 "settings.launch_at_login" = "ログイン時に起動";
@@ -56,6 +65,10 @@
 "settings.shortcut.unavailable" = "この組み合わせは他のアプリが使っています。別の組み合わせを記録してください。";
 "settings.apps.detail" = "完了したターンがノートを残すコーディングエージェントを接続します。";
 "settings.access.detail" = "クリックが正確なタブ・ウインドウ・セッションへ戻るためのアクセスを許可します。";
+"settings.update.detail" = "Cairn は1日に1回アップデートを確認し、ダウンロードのタイミングは選べます。";
+"settings.update.available.detail" = "Cairn %@ をダウンロードできます。";
+"settings.feedback" = "役に立っているか、教えてください";
+"settings.feedback.detail" = "Cairn は何も計測しません。あなたが書いてくれる一言だけが、届いたかどうかを知る手がかりです。";
 
 "update.available" = "アップデートがあります";
 "update.version_format" = "Cairn %@";
@@ -64,6 +77,9 @@
 "update.checking" = "確認中…";
 "update.up_to_date" = "最新バージョンです";
 "update.failed" = "アップデートを確認できませんでした";
+"update.download" = "ダウンロード";
+"update.later" = "あとで";
+"update.notification.body" = "Cairn %@ をダウンロードできます。";
 
 "relative.now" = "今";
 "relative.minutes" = "%d分";

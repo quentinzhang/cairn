@@ -285,6 +285,22 @@ extension Cairn {
             washDark: 0.16
         )
 
+        /// Cairn's own jade — the one tone that belongs to no agent.
+        ///
+        /// Reserved by the same reasoning that took teal away from Codex
+        /// (see `codex`): a jade card reads as a message from the app itself.
+        /// That is exactly what it is used for, and it is why nothing else on
+        /// this desktop may wear it.
+        static let cairn = Tone(
+            hue: Brand.jade,
+            railLight: Color(hex: 0x14806F),
+            railDark: Brand.jadeGlow,
+            labelLight: Brand.jadeDeep,
+            labelDark: Color(hex: 0x6FD8C4),
+            washLight: 0.10,
+            washDark: 0.16
+        )
+
         /// Any source Cairn has not been taught yet.
         static let unknown = Tone(
             hue: Color(hex: 0xD18529),
@@ -363,8 +379,15 @@ extension Cairn {
 
         static let noteRailWidth: CGFloat = 3
         static let noteRailHeight: CGFloat = 54
-        /// The pill that clears the whole queue, pinned under the stack.
-        static let noteClearAllHeight: CGFloat = 26
+        /// The queue's own controls — the search field and the pill that
+        /// clears everything — pinned in one row above the stack. One height
+        /// for both: they sit side by side, and a pill a hair taller than the
+        /// field beside it reads as a mistake rather than as a hierarchy.
+        static let noteChromeHeight: CGFloat = 26
+        /// What a search that found nothing costs. One line of `Typo.meta`
+        /// with room to breathe — smaller than a card, because the panel
+        /// shrinking is itself part of the answer.
+        static let noteEmptyResultHeight: CGFloat = 40
         /// A stacked note's shoulder: how far the card underneath peeks out
         /// below the top one, and how far it is drawn in from each side. Enough
         /// curve to read as another card, not enough to be mistaken for one you
@@ -401,7 +424,12 @@ extension Cairn {
         /// The settings window. Nothing in it reflows — it is a sheet of
         /// switches, not a document — so the size is tuned here like the
         /// control's rather than left to the content.
-        static let settingsWindow = CGSize(width: 520, height: 740)
+        ///
+        /// Tuned to hold every section without scrolling. A switch that has to
+        /// be scrolled to is a switch nobody finds, and the last section is the
+        /// one asking whether any of this helps — the row that most needs to be
+        /// seen sits furthest down. Adding a section means re-tuning this.
+        static let settingsWindow = CGSize(width: 520, height: 860)
         /// The mark that heads that window, as a multiple of the one the
         /// desktop control draws. Large enough to read as the product's face,
         /// not so large that the switches start below the fold.
@@ -451,6 +479,13 @@ extension Cairn {
         }
         /// Glyphs inside small circular targets.
         static let glyph = Font.system(size: 9, weight: .bold)
+        /// Glyphs in the queue's own control row, whose targets are half again
+        /// the size of the ones inside a card. A seventh role rather than a
+        /// reused sixth because `glyph` is tuned to survive being tiny — bold,
+        /// and only ever asked to draw an × or a chevron. The control row
+        /// carries a symbol that has to stay readable as a *picture*, and 9pt
+        /// bold turns one of those into a smudge.
+        static let chromeGlyph = Font.system(size: 11, weight: .semibold)
     }
 }
 
@@ -597,6 +632,19 @@ extension Cairn {
         /// than as a group of rows lifted off it.
         static func card(_ scheme: ColorScheme) -> Color {
             Color.white.opacity(scheme == .dark ? 0.05 : 0.70)
+        }
+
+        /// The run of text a query landed on.
+        ///
+        /// Jade, because the rule this system runs on is that jade is Cairn
+        /// talking about itself and every other hue on screen belongs to an
+        /// agent. A highlight is the search answering "this is why you are
+        /// seeing this note" — Cairn's voice, over an agent's words. Tinting
+        /// it with the agent's own colour would put that hue on the rail, the
+        /// label and the sentence, and a colour used three ways stops meaning
+        /// any of them.
+        static func searchHit(_ scheme: ColorScheme) -> Color {
+            Cairn.Brand.jade.opacity(scheme == .dark ? 0.42 : 0.22)
         }
 
         /// One alpha step — thin enough to be invisible, thick enough to exist.

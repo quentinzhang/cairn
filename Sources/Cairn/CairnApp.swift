@@ -26,6 +26,14 @@ enum CairnBuildInfo {
         }
         return L10n.format("build.version_format", version, build)
     }
+
+    /// The one place Cairn asks for something back.
+    ///
+    /// The product measures nothing — no account, no analytics, no telemetry —
+    /// so a thread someone chooses to open is the only channel that exists.
+    /// Opening it carries no identifier and no note data; it is a link, not a
+    /// report.
+    static let feedbackURL = URL(string: "https://github.com/quentinzhang/cairn/discussions/1")!
 }
 
 @main
@@ -54,7 +62,7 @@ struct CairnApp: App {
                 settings: settings
             )
         )
-        let updateChecker = UpdateChecker()
+        let updateChecker = UpdateChecker.shared
         updateChecker.start()
         _updateChecker = StateObject(wrappedValue: updateChecker)
         _permissions = StateObject(wrappedValue: PermissionExperience.shared)
@@ -548,9 +556,22 @@ final class FloatingQueuePresenter: ObservableObject {
     /// SwiftUI draws a single card of it.
     @Published private(set) var expandedStackKey: String?
 
+    /// The query the queue is being read through.
+    ///
+    /// Here rather than in the view for the same reason the open stack is: the
+    /// panel is an `NSPanel` whose height AppKit fixes before SwiftUI draws a
+    /// card, so whatever decides how many rows there are has to be readable
+    /// from outside the view that draws them. Whether the *field* is open is
+    /// not that — it is hover, focus and emptiness, none of which change a
+    /// row — so it stays in the view that can see all three.
+    @Published private(set) var searchQuery = ""
+
     private let notesPanel: NSPanel
     private let controlPanel: NSPanel
     private var hintPanel: NSPanel?
+    private var updatePanel: NSPanel?
+    /// An announcement that arrived before anything could show it.
+    private var pendingUpdate: AppUpdate?
     private weak var store: CompletionStore?
     private let settings: CairnSettings
     private var screenObserver: NSObjectProtocol?
@@ -560,6 +581,7 @@ final class FloatingQueuePresenter: ObservableObject {
     private var controlSizeObserver: NSObjectProtocol?
     private var shortcutObserver: NSObjectProtocol?
     private var stackingObserver: NSObjectProtocol?
+    private var updateObserver: NSObjectProtocol?
     private var hasFinishedLaunching = false
     /// While onboarding gates the app, the panels stay off screen: an ignored
     /// connect window must look like an app that has not started yet.
@@ -586,7 +608,7 @@ final class FloatingQueuePresenter: ObservableObject {
             : preferences.bool(forKey: PreferenceKey.presentsNotes)
         self.store = store
         self.settings = settings
-        notesPanel = NSPanel(
+        notesPanel = CairnNotesPanel(
             contentRect: NSRect(
                 x: 0,
                 y: 0,
@@ -631,6 +653,7 @@ final class FloatingQueuePresenter: ObservableObject {
                 self.controlPanel.setFrame(self.initialControlFrame(), display: true)
                 self.syncPanels()
                 self.installShortcut()
+                self.presentPendingUpdateIfNeeded()
             }
         }
         screenObserver = NotificationCenter.default.addObserver(
@@ -660,6 +683,16 @@ final class FloatingQueuePresenter: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.beginPresentingSurfaces() }
+        }
+        updateObserver = NotificationCenter.default.addObserver(
+            forName: .cairnUpdateDidArrive,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let update = note.userInfo?[
+                CairnUpdateAnnouncement.updateKey
+            ] as? AppUpdate else { return }
+            Task { @MainActor [weak self] in self?.announceUpdate(update) }
         }
         controlSizeObserver = NotificationCenter.default.addObserver(
             forName: .cairnControlSizeDidChange,
@@ -719,10 +752,13 @@ final class FloatingQueuePresenter: ObservableObject {
         UserDefaults.standard.set(controlPanel.frame.origin.x, forKey: PreferenceKey.controlX)
         UserDefaults.standard.set(controlPanel.frame.origin.y, forKey: PreferenceKey.controlY)
         syncPanels()
-        // The introduction, if it is still standing, was placed beside a control
+        // Anything standing beside the control was placed against a control
         // that just changed shape.
         if let hintPanel {
-            hintPanel.setFrameOrigin(introductionOrigin(size: hintPanel.frame.size))
+            hintPanel.setFrameOrigin(besideControlOrigin(size: hintPanel.frame.size))
+        }
+        if let updatePanel {
+            updatePanel.setFrameOrigin(besideControlOrigin(size: updatePanel.frame.size))
         }
     }
 
@@ -735,6 +771,7 @@ final class FloatingQueuePresenter: ObservableObject {
         controlPanel.setFrame(initialControlFrame(), display: true)
         syncPanels()
         installShortcut()
+        presentPendingUpdateIfNeeded()
     }
 
     /// The shortcut is claimed only once the app is really running — never
@@ -789,10 +826,12 @@ final class FloatingQueuePresenter: ObservableObject {
         guard let store, !store.completions.isEmpty else { return }
         presentsNotes.toggle()
         // A queue that is put away and taken out again comes back the way a
-        // queue looks: every project one row. An open stack is a question
-        // being asked right now, not a state worth keeping.
+        // queue looks: every project one row, nothing filtered out. An open
+        // stack and a live query are both questions being asked right now, not
+        // states worth keeping.
         if !presentsNotes {
             expandedStackKey = nil
+            resetSearch()
         }
         UserDefaults.standard.set(presentsNotes, forKey: PreferenceKey.presentsNotes)
         syncPanels()
@@ -803,6 +842,67 @@ final class FloatingQueuePresenter: ObservableObject {
     func toggleStack(_ key: String) {
         expandedStackKey = expandedStackKey == key ? nil : key
         syncPanels()
+    }
+
+    /// The rows the panel is showing, which during a search is not the queue.
+    ///
+    /// Stacking is suspended while a query is live. A pile exists to say "one
+    /// project answered five times, and that is one thing that happened" — but
+    /// a search has already decided which of those five it wants, and folding
+    /// the answer back under a collapsed card hides the very note that was
+    /// asked for.
+    var visibleStacks: [NoteStack] {
+        NoteQueue.stacks(
+            for: NoteSearch.filter(store?.completions ?? [], query: searchQuery),
+            stacking: settings.stacksNotes && !isFiltering
+        )
+    }
+
+    var isFiltering: Bool {
+        NoteSearch.isFiltering(searchQuery)
+    }
+
+    var queueChrome: NoteQueue.QueueChrome {
+        NoteQueue.chrome(
+            noteCount: store?.completions.count ?? 0,
+            rowCount: visibleStacks.count,
+            isFiltering: isFiltering
+        )
+    }
+
+    /// A caret has landed in the search field, so the keyboard has to come
+    /// here.
+    ///
+    /// The panel is borderless, so it refuses key status until asked; it is
+    /// also non-activating, so taking it costs the app in front nothing —
+    /// Cairn never comes forward, the menu bar never changes hands, and the
+    /// only thing that moves is where the next keystroke goes.
+    ///
+    /// Called on focus rather than on the field opening, because the field
+    /// opens on hover: a pointer crossing the queue must not take the keyboard
+    /// away from the window someone is typing in.
+    func claimKeyboard() {
+        dismissControlIntroduction()
+        notesPanel.makeKeyAndOrderFront(nil)
+    }
+
+    func updateSearchQuery(_ query: String) {
+        guard searchQuery != query else { return }
+        searchQuery = query
+        // Never animated: `setFrame(display:animate:)` blocks the main thread
+        // for the length of the animation, and a panel that animates its
+        // height on every keystroke is a search field that drops characters.
+        syncPanels(animatingResize: false)
+    }
+
+    func endSearch() {
+        guard isFiltering else { return }
+        searchQuery = ""
+        syncPanels()
+    }
+
+    private func resetSearch() {
+        searchQuery = ""
     }
 
     func updateControlDrag(translation: CGSize) {
@@ -818,7 +918,7 @@ final class FloatingQueuePresenter: ObservableObject {
         )
         controlPanel.setFrameOrigin(clampedControlOrigin(proposed))
         if presentsNotes {
-            positionNotesPanel(stacks: currentStacks(), animate: false)
+            positionNotesPanel(stacks: visibleStacks, animate: false)
         }
     }
 
@@ -859,7 +959,7 @@ final class FloatingQueuePresenter: ObservableObject {
         )
         panel.contentView = host
         panel.setContentSize(host.fittingSize)
-        panel.setFrameOrigin(introductionOrigin(size: host.fittingSize))
+        panel.setFrameOrigin(besideControlOrigin(size: host.fittingSize))
         hintPanel = panel
 
         panel.orderFrontRegardless()
@@ -872,11 +972,89 @@ final class FloatingQueuePresenter: ObservableObject {
         UserDefaults.standard.set(true, forKey: PreferenceKey.controlIntroduced)
         hintPanel.orderOut(nil)
         self.hintPanel = nil
+        presentPendingUpdateIfNeeded()
     }
 
-    /// Beside the control, on the side notes will appear — the introduction
-    /// stands exactly where what it describes is going to happen.
-    private func introductionOrigin(size: NSSize) -> NSPoint {
+    /// Cairn's own news, drawn by Cairn: a panel beside the stones rather than
+    /// a system notification, so the app still asks macOS for no privacy
+    /// permission at all.
+    ///
+    /// It waits rather than demands — non-activating, never key, no timeout —
+    /// which is the same bargain every note in the queue makes. The checker
+    /// already guarantees one arrival per version, so nothing here has to
+    /// defend against nagging.
+    func announceUpdate(_ update: AppUpdate) {
+        // First run outranks a version number: the introduction teaches what
+        // the stones are, and this panel would stand in the same place.
+        //
+        // Held rather than dropped. The check runs from `CairnApp.init()`, so
+        // it can answer before the app has finished launching, and onboarding
+        // can be holding every surface — neither is a reason for a version to
+        // go unannounced forever.
+        guard hasFinishedLaunching, !surfacesHeld, hintPanel == nil else {
+            pendingUpdate = update
+            return
+        }
+        pendingUpdate = nil
+        dismissUpdateAnnouncement()
+
+        let panel = NSPanel(
+            contentRect: NSRect(origin: .zero, size: .zero),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        configureBasePanel(panel)
+        panel.level = controlPanel.level
+        panel.animationBehavior = .utilityWindow
+
+        let host = NSHostingView(
+            rootView: UpdateAnnouncementView(
+                update: update,
+                onDownload: { [weak self] in
+                    NSWorkspace.shared.open(update.installURL)
+                    self?.dismissUpdateAnnouncement()
+                },
+                onDismiss: { [weak self] in
+                    self?.dismissUpdateAnnouncement()
+                }
+            )
+        )
+        panel.contentView = host
+        panel.setContentSize(host.fittingSize)
+        panel.setFrameOrigin(besideControlOrigin(size: host.fittingSize))
+        updatePanel = panel
+
+        panel.orderFrontRegardless()
+        // The queue is anchored to the same top edge, so it has to be told to
+        // move down before either is shown — otherwise the announcement lands
+        // on the newest note.
+        syncPanels()
+        panel.orderFrontRegardless()
+        controlPanel.orderFrontRegardless()
+        callAttention()
+
+        // On screen: only now is this version spent.
+        UpdateChecker.shared.confirmAnnounced(update.version)
+    }
+
+    /// Show whatever was held back, once the reason for holding it is gone.
+    private func presentPendingUpdateIfNeeded() {
+        guard let pendingUpdate else { return }
+        announceUpdate(pendingUpdate)
+    }
+
+    func dismissUpdateAnnouncement() {
+        guard let updatePanel else { return }
+        updatePanel.orderOut(nil)
+        self.updatePanel = nil
+        // The band is free again; the queue takes it back.
+        syncPanels()
+    }
+
+    /// Beside the control, on the side notes will appear — anything Cairn
+    /// says for itself stands exactly where what it describes happens.
+    private func besideControlOrigin(size: NSSize) -> NSPoint {
         let controlFrame = controlPanel.frame
         let screen = NSScreen.screens.first(where: { $0.frame.intersects(controlFrame) })
             ?? activeScreen()
@@ -950,17 +1128,24 @@ final class FloatingQueuePresenter: ObservableObject {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
     }
 
-    private func currentStacks() -> [NoteStack] {
-        NoteQueue.stacks(
-            for: store?.completions ?? [],
-            stacking: settings.stacksNotes
-        )
-    }
-
-    private func syncPanels() {
+    private func syncPanels(animatingResize: Bool = true) {
         controlPanel.orderFrontRegardless()
 
-        let stacks = currentStacks()
+        // Emptiness is a fact about the queue, not about the rows on screen.
+        // A search that matches nothing has to keep the panel standing — the
+        // field the query was typed into is in it.
+        guard let store, !store.completions.isEmpty else {
+            if presentsNotes {
+                presentsNotes = false
+                UserDefaults.standard.set(false, forKey: PreferenceKey.presentsNotes)
+            }
+            expandedStackKey = nil
+            resetSearch()
+            notesPanel.orderOut(nil)
+            return
+        }
+
+        let stacks = visibleStacks
         // A pile whose last note was dismissed is not open, it is gone — and a
         // key left pointing at it would swallow the next stack that happens to
         // gather in the same project.
@@ -968,31 +1153,23 @@ final class FloatingQueuePresenter: ObservableObject {
             self.expandedStackKey = nil
         }
 
-        if stacks.isEmpty {
-            if presentsNotes {
-                presentsNotes = false
-                UserDefaults.standard.set(false, forKey: PreferenceKey.presentsNotes)
-            }
-            notesPanel.orderOut(nil)
-            return
-        }
-
         guard presentsNotes else {
             notesPanel.orderOut(nil)
             return
         }
 
-        positionNotesPanel(stacks: stacks, animate: notesPanel.isVisible)
+        positionNotesPanel(stacks: stacks, animate: animatingResize && notesPanel.isVisible)
         notesPanel.orderFrontRegardless()
         controlPanel.orderFrontRegardless()
     }
 
     private func positionNotesPanel(stacks: [NoteStack], animate: Bool) {
-        guard !stacks.isEmpty else { return }
         let contentHeight = NoteQueue.contentHeight(
             for: stacks,
-            expandedKey: expandedStackKey
+            expandedKey: expandedStackKey,
+            chrome: queueChrome
         )
+        guard contentHeight > 0 else { return }
         let panelHeight = min(contentHeight, maximumNotesPanelHeight())
         let panelSize = NSSize(width: Cairn.Metrics.notePanelWidth, height: panelHeight)
         let frame = notesPanelFrame(size: panelSize)
@@ -1010,9 +1187,28 @@ final class FloatingQueuePresenter: ObservableObject {
             NoteQueue.maximumHeight,
             max(
                 NoteQueue.minimumHeight,
-                visibleFrame.height - Cairn.Metrics.screenMargin * 2
+                visibleFrame.height - Cairn.Metrics.screenMargin * 2 - announcementReservedHeight
             )
         )
+    }
+
+    /// The band the update panel holds at the top of the column, so the queue
+    /// starts below it instead of underneath it.
+    ///
+    /// Both are anchored to the top of the control — that is what puts a note
+    /// where the stones are — so without this reservation the announcement
+    /// lands exactly on the newest note. Zero whenever no announcement is up,
+    /// which is almost always.
+    ///
+    /// The panel's frame is larger than the card drawn inside it (`Space.md`
+    /// all round, for the shadow) and the queue insets its own content by
+    /// `Space.lg`. Subtracting that inset lands the two cards exactly
+    /// `noteCardSpacing` apart — the same rhythm notes keep with each other,
+    /// which is what makes the announcement read as the top of one column
+    /// rather than a second floating thing.
+    private var announcementReservedHeight: CGFloat {
+        guard let updatePanel, updatePanel.isVisible else { return 0 }
+        return max(0, updatePanel.frame.height - Cairn.Space.lg)
     }
 
     private func initialControlFrame() -> NSRect {
@@ -1067,10 +1263,10 @@ final class FloatingQueuePresenter: ObservableObject {
         let x = hasRoomOnLeft
             ? controlFrame.minX - size.width - gap
             : min(controlFrame.maxX + gap, visibleFrame.maxX - size.width - margin)
-        let preferredY = controlFrame.maxY - size.height
+        let preferredY = controlFrame.maxY - size.height - announcementReservedHeight
         let y = min(
             max(preferredY, visibleFrame.minY + margin),
-            visibleFrame.maxY - size.height - margin
+            visibleFrame.maxY - size.height - margin - announcementReservedHeight
         )
 
         return NSRect(x: x, y: y, width: size.width, height: size.height)
@@ -1082,6 +1278,24 @@ final class FloatingQueuePresenter: ObservableObject {
             ?? NSScreen.main
             ?? NSScreen.screens.first
     }
+}
+
+/// The one panel in Cairn that has to be able to take a keystroke.
+///
+/// A borderless window refuses key status by default, which is why nothing in
+/// the app could hold a caret until the queue grew a search field.
+/// `.nonactivatingPanel` in the style mask is what makes granting it safe: the
+/// panel becomes key *without* Cairn activating, so the app being worked in
+/// keeps its foreground state and its menu bar. That is not a detail — a queue
+/// that pulled focus to read it would be interrupting exactly the work it
+/// exists to stay out of.
+///
+/// `becomesKeyOnlyIfNeeded`, set on every panel in `configureBasePanel`, then
+/// narrows it to the one gesture that means it: only a click landing on
+/// something that wants first responder moves key here, so clicking a card to
+/// follow its trail still does not.
+final class CairnNotesPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
 }
 
 private struct CairnControlView: View {
@@ -1530,6 +1744,108 @@ private struct ControlIntroductionView: View {
     }
 }
 
+/// Cairn's own news, in the queue's clothes. It borrows the introduction's
+/// card exactly — same material, same border, same shadow — because a panel
+/// that looked like a system banner would be claiming an authority the app
+/// deliberately does not have.
+///
+/// Jade on Download and nowhere else: jade is the one hue Cairn speaks in
+/// about itself, and every other colour on this desktop belongs to an agent.
+private struct UpdateAnnouncementView: View {
+    @Environment(\.colorScheme) private var scheme
+    let update: AppUpdate
+    let onDownload: () -> Void
+    let onDismiss: () -> Void
+
+    private var tone: Cairn.Tone { .cairn }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Cairn.Space.md) {
+            // A note's header without the glyph: the jade rail already says
+            // who is speaking, the same way an agent's rail does, and the
+            // three-stone mark is illegible at an agent glyph's size.
+            HStack(spacing: Cairn.Space.xs) {
+                Text(verbatim: "Cairn")
+                    .font(Cairn.Typo.label)
+                    .foregroundStyle(tone.label(scheme))
+
+                Text("· \(L10n.string("update.available"))")
+                    .font(Cairn.Typo.label)
+                    .foregroundStyle(Cairn.Ink.tertiary)
+            }
+
+            // Wrap rather than truncate: the panel takes its width from this
+            // view, and a measured single line ends in "…".
+            Text(L10n.format("update.notification.body", update.version))
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: Cairn.Space.md) {
+                Spacer()
+
+                // Later stays text: the panel already goes away on its own
+                // terms, and two filled buttons would make a dialog out of a
+                // note.
+                Button(L10n.string("update.later"), action: onDismiss)
+                    .buttonStyle(.borderless)
+                    .font(Cairn.Typo.label)
+                    .foregroundStyle(Cairn.Ink.tertiary)
+
+                // A shape, not just a colour: bare jade text on a jade wash is
+                // a tint, not an affordance. Filled and bordered in jade, with
+                // a jade label — white on jade belongs to Settings, where the
+                // button sits on an opaque sheet rather than on a translucent
+                // card over the wallpaper.
+                Button(action: onDownload) {
+                    Text(L10n.string("update.download"))
+                        .font(Cairn.Typo.label)
+                        .foregroundStyle(tone.label(scheme))
+                        .padding(.horizontal, Cairn.Space.md)
+                        .padding(.vertical, Cairn.Space.xs)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(tone.rail(scheme).opacity(0.18))
+                        )
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .strokeBorder(
+                                    tone.rail(scheme).opacity(0.45),
+                                    lineWidth: Cairn.Stroke.width
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .font(Cairn.Typo.meta)
+        .foregroundStyle(Cairn.Ink.body)
+        .padding(Cairn.Space.lg)
+        .frame(width: Cairn.Metrics.notePanelWidth - Cairn.Space.lg * 2, alignment: .leading)
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: Cairn.Radius.card, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: Cairn.Radius.card, style: .continuous)
+                    .fill(tone.wash(scheme))
+            }
+        }
+        .overlay(alignment: .leading) {
+            Capsule()
+                .fill(tone.rail(scheme))
+                .frame(
+                    width: Cairn.Metrics.noteRailWidth,
+                    height: Cairn.Metrics.noteRailHeight
+                )
+                .padding(.leading, Cairn.Space.xs)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: Cairn.Radius.card, style: .continuous)
+                .strokeBorder(tone.rail(scheme).opacity(0.55), lineWidth: Cairn.Stroke.width)
+        }
+        .cairnShadow(.note(scheme))
+        .padding(Cairn.Space.md)
+    }
+}
+
 private struct FloatingQueueView: View {
     @ObservedObject var store: CompletionStore
     @ObservedObject var presenter: FloatingQueuePresenter
@@ -1539,34 +1855,53 @@ private struct FloatingQueueView: View {
     @State private var scrollMetrics = QueueScrollMetrics()
     @State private var indicatorVisible = false
     @State private var indicatorHideTask: Task<Void, Never>?
-    @State private var isClearHovering = false
-
-    private var stacks: [NoteStack] {
-        NoteQueue.stacks(for: store.completions, stacking: settings.stacksNotes)
-    }
 
     var body: some View {
-        let stacks = self.stacks
+        let stacks = presenter.visibleStacks
+        let chrome = presenter.queueChrome
 
         VStack(spacing: 0) {
+            if chrome.showsHeader {
+                QueueHeader(
+                    query: presenter.searchQuery,
+                    noteCount: store.completions.count,
+                    showsClearAll: chrome.showsClearAll,
+                    onQueryChange: presenter.updateSearchQuery,
+                    onEndSearch: presenter.endSearch,
+                    onClaimKeyboard: presenter.claimKeyboard,
+                    onClearAll: {
+                        withAnimation(Cairn.Motion.dismiss) {
+                            store.clear()
+                        }
+                    }
+                )
+            }
+
             ScrollView(.vertical) {
-                LazyVStack(spacing: Cairn.Metrics.noteCardSpacing) {
-                    ForEach(stacks) { stack in
-                        NoteStackRow(
-                            stack: stack,
-                            isExpanded: presenter.expandedStackKey == stack.key,
-                            onToggle: { presenter.toggleStack(stack.key) },
-                            onDismiss: { keys in
-                                withAnimation(Cairn.Motion.dismiss) {
-                                    store.dismiss(sessionKeys: keys)
-                                }
+                Group {
+                    if chrome.showsEmptyResult {
+                        emptyResult
+                    } else {
+                        LazyVStack(spacing: Cairn.Metrics.noteCardSpacing) {
+                            ForEach(stacks) { stack in
+                                NoteStackRow(
+                                    stack: stack,
+                                    isExpanded: presenter.expandedStackKey == stack.key,
+                                    query: presenter.searchQuery,
+                                    onToggle: { presenter.toggleStack(stack.key) },
+                                    onDismiss: { keys in
+                                        withAnimation(Cairn.Motion.dismiss) {
+                                            store.dismiss(sessionKeys: keys)
+                                        }
+                                    }
+                                )
+                                .id(stack.key)
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .top).combined(with: .opacity),
+                                    removal: .scale(scale: 0.96).combined(with: .opacity)
+                                ))
                             }
-                        )
-                        .id(stack.key)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity),
-                            removal: .scale(scale: 0.96).combined(with: .opacity)
-                        ))
+                        }
                     }
                 }
                 .padding(Cairn.Space.lg)
@@ -1574,10 +1909,6 @@ private struct FloatingQueueView: View {
             }
             .scrollIndicators(.never)
             .overlay(alignment: .topTrailing) { scrollIndicator }
-
-            if NoteQueue.showsClearAll(for: stacks.count) {
-                clearAllControl
-            }
         }
         .frame(width: Cairn.Metrics.notePanelWidth)
         .frame(maxHeight: .infinity, alignment: .top)
@@ -1587,62 +1918,21 @@ private struct FloatingQueueView: View {
         .background(Cairn.Surface.eventVeil)
         .animation(Cairn.Motion.enqueue, value: store.completions.map(\.sessionKey))
         .animation(Cairn.Motion.toggle, value: presenter.expandedStackKey)
+        .animation(Cairn.Motion.dismiss, value: presenter.searchQuery)
     }
 
-    /// Below the stack rather than above it: notes arrive at the top, and a
-    /// control that the newest note pushes around is a control you misclick.
-    /// It stays pinned outside the scroll view so a long queue cannot bury it.
-    private var clearAllControl: some View {
-        Button {
-            withAnimation(Cairn.Motion.dismiss) {
-                store.clear()
-            }
-        } label: {
-            HStack(spacing: Cairn.Space.xs) {
-                Image(systemName: "xmark")
-                    .font(Cairn.Typo.glyph)
-                Text(L10n.string("note.clear_all"))
-                    .font(Cairn.Typo.meta)
-            }
-            .foregroundStyle(Cairn.Ink.secondary)
-            .padding(.horizontal, Cairn.Space.lg)
-            .frame(height: Cairn.Metrics.noteClearAllHeight)
-            .background {
-                Capsule(style: .continuous)
-                    .fill(.ultraThinMaterial)
-            }
-            .overlay {
-                Capsule(style: .continuous)
-                    .strokeBorder(
-                        isClearHovering
-                            ? Color.white.opacity(colorScheme == .dark ? 0.28 : 0.72)
-                            : Cairn.Stroke.card(colorScheme),
-                        lineWidth: Cairn.Stroke.width
-                    )
-            }
-            .cairnShadow(.note(colorScheme))
-        }
-        .buttonStyle(.plain)
-        .padding(.bottom, Cairn.Space.lg)
-        .onHover { hovering in
-            isClearHovering = hovering
-            if hovering {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
-        .animation(Cairn.Motion.hover, value: isClearHovering)
-        // Clearing the queue takes the pill out from under the cursor, so the
-        // pointing hand has to be popped on the way out or it sticks.
-        .onDisappear {
-            if isClearHovering {
-                isClearHovering = false
-                NSCursor.pop()
-            }
-        }
-        .help(L10n.string("note.clear_all.help"))
-        .transition(.opacity.combined(with: .move(edge: .bottom)))
+    /// A search that found nothing, said in one line and nothing else. The
+    /// panel shrinking around it is most of the answer; a drawn empty state
+    /// with an illustration would be a bigger object than the thing it reports.
+    private var emptyResult: some View {
+        Text(L10n.string("note.search.empty"))
+            .font(Cairn.Typo.meta)
+            .foregroundStyle(Cairn.Ink.tertiary)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: Cairn.Metrics.noteEmptyResultHeight
+            )
+            .transition(.opacity)
     }
 
     /// Dark core with a light hairline, so the thumb reads over any wallpaper.
@@ -1690,6 +1980,337 @@ private struct FloatingQueueView: View {
             try? await Task.sleep(for: .milliseconds(900))
             guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.35)) { indicatorVisible = false }
+        }
+    }
+}
+
+/// The queue's own two controls, in one row above the stack.
+///
+/// Above rather than below, which is where clearing the queue used to live.
+/// The panel is pinned by its top edge and grows downward, so a control at the
+/// bottom moves on screen every time a note arrives or is dismissed — the
+/// misclick the old placement was trying to avoid is the one it had. The top
+/// of the panel is the only part of it that holds still.
+///
+/// Both rest as bare icons at the right, and both open leftward into the empty
+/// half of the row — the half that is empty precisely because nothing else
+/// wants it. Searching opens on a click and stays; clearing opens on hover and
+/// closes again, because it needs to say what it does exactly once, in the
+/// moment before it is pressed.
+///
+/// Searching takes the whole row when it opens, and the pill that clears
+/// everything gives way. That is also how "no clearing things mid-search" is
+/// enforced — not as a rule two controls have to remember, but as the fact
+/// that there is one row and the field is standing in it.
+private struct QueueHeader: View {
+    let query: String
+    /// Every note behind the row, which is what "clear all" is about to take.
+    let noteCount: Int
+    let showsClearAll: Bool
+    let onQueryChange: (String) -> Void
+    let onEndSearch: () -> Void
+    let onClaimKeyboard: () -> Void
+    let onClearAll: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+    @FocusState private var isFieldFocused: Bool
+    @State private var isSearchHovering = false
+    @State private var isClearHovering = false
+    @State private var isConfirmingClear = false
+    /// Set when the field is opened by something that is not a pointer — a
+    /// keyboard or VoiceOver press of the collapsed button. It holds the row
+    /// open for the one frame between the field existing and the caret
+    /// reaching it, after which focus keeps it open on its own.
+    @State private var isOpeningByCommand = false
+
+    /// Open on hover, and stay open for the two reasons a pointer leaving does
+    /// not settle: there is a caret in it, or there is something typed in it.
+    /// Both mean the field is in use by someone who is no longer pointing at
+    /// it, and collapsing under either would throw away a query mid-thought.
+    private var isSearchOpen: Bool {
+        guard !isConfirmingClear else { return false }
+        return isSearchHovering || isOpeningByCommand || isFieldFocused || !query.isEmpty
+    }
+
+    /// The setter is wrapped rather than passed through: `Binding` declares it
+    /// `@Sendable`, and handing it a stored closure straight across is a
+    /// concurrency warning about a hop that never happens — every keystroke
+    /// here is already on the main actor.
+    private var queryBinding: Binding<String> {
+        Binding(get: { query }, set: { onQueryChange($0) })
+    }
+
+    var body: some View {
+        HStack(spacing: Cairn.Space.sm) {
+            // The row is right-aligned, so the empty half is on the left and
+            // everything here opens into it rather than shoving anything.
+            Spacer(minLength: 0)
+
+            if isConfirmingClear {
+                clearConfirmation
+            } else {
+                searchControl
+
+                if showsClearAll, !isSearchOpen {
+                    clearAllControl
+                        .transition(.opacity)
+                }
+            }
+        }
+        .frame(height: Cairn.Metrics.noteChromeHeight)
+        .padding(.horizontal, Cairn.Space.lg)
+        .padding(.top, Cairn.Space.lg)
+        .animation(Cairn.Motion.toggle, value: isSearchOpen)
+        .animation(Cairn.Motion.toggle, value: isConfirmingClear)
+    }
+
+    // MARK: - Search
+
+    private var searchControl: some View {
+        HStack(spacing: 0) {
+            if isSearchOpen {
+                Image(systemName: "magnifyingglass")
+                    .font(Cairn.Typo.chromeGlyph)
+                    .foregroundStyle(Cairn.Ink.secondary)
+                    .frame(
+                        width: Cairn.Metrics.noteChromeHeight,
+                        height: Cairn.Metrics.noteChromeHeight
+                    )
+
+                TextField(L10n.string("note.search.placeholder"), text: queryBinding)
+                    .textFieldStyle(.plain)
+                    .font(Cairn.Typo.meta)
+                    .foregroundStyle(Cairn.Ink.primary)
+                    .focused($isFieldFocused)
+                    .onSubmit { isFieldFocused = false }
+                    // SwiftUI will not take focus on a field in the same pass
+                    // that inserted it; one turn of the run loop is what makes
+                    // the caret appear.
+                    .onAppear {
+                        guard isOpeningByCommand else { return }
+                        DispatchQueue.main.async {
+                            isFieldFocused = true
+                            isOpeningByCommand = false
+                        }
+                    }
+
+                if !query.isEmpty {
+                    Button {
+                        onQueryChange("")
+                        isFieldFocused = true
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(Cairn.Typo.glyph)
+                            .frame(
+                                width: Cairn.Metrics.dismissTarget,
+                                height: Cairn.Metrics.dismissTarget
+                            )
+                            .background(.quaternary, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Cairn.Ink.secondary)
+                    .padding(.trailing, Cairn.Space.xs)
+                    .help(L10n.string("note.search.clear"))
+                    .transition(.opacity)
+                }
+            } else {
+                // A real button, not a tappable shape: the pointer opens this
+                // row by hovering it and never needs the press, so the press is
+                // the only way in that a keyboard or VoiceOver has.
+                Button {
+                    isOpeningByCommand = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                        .font(Cairn.Typo.chromeGlyph)
+                        .foregroundStyle(Cairn.Ink.secondary)
+                        .frame(
+                            width: Cairn.Metrics.noteChromeHeight,
+                            height: Cairn.Metrics.noteChromeHeight
+                        )
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L10n.string("note.search"))
+            }
+        }
+        .frame(
+            maxWidth: isSearchOpen ? .infinity : Cairn.Metrics.noteChromeHeight,
+            alignment: .leading
+        )
+        .frame(height: Cairn.Metrics.noteChromeHeight)
+        .background {
+            Capsule(style: .continuous)
+                .fill(.ultraThinMaterial)
+        }
+        .overlay {
+            Capsule(style: .continuous)
+                .strokeBorder(
+                    isSearchOpen
+                        ? Color.white.opacity(colorScheme == .dark ? 0.28 : 0.72)
+                        : Cairn.Stroke.card(colorScheme),
+                    lineWidth: Cairn.Stroke.width
+                )
+        }
+        .cairnShadow(.note(colorScheme))
+        .contentShape(Capsule(style: .continuous))
+        .onHover { isSearchHovering = $0 }
+        // Key status is claimed when a caret actually lands, never when the
+        // pointer merely passes over: hovering a queue must not take the
+        // keyboard away from the window someone is working in.
+        .onChange(of: isFieldFocused) { _, focused in
+            guard focused else { return }
+            isOpeningByCommand = false
+            onClaimKeyboard()
+        }
+        // Both presses of it: the query first, then the caret. Nothing is taken
+        // back that was not asked for.
+        .onExitCommand {
+            if query.isEmpty {
+                isFieldFocused = false
+                onEndSearch()
+            } else {
+                onQueryChange("")
+            }
+        }
+        .help(L10n.string("note.search"))
+    }
+
+    // MARK: - Clearing
+
+    /// A stack with something taken off it, rather than the × the row would
+    /// otherwise wear.
+    ///
+    /// Collapsed, this control is a small circle at the top right of the panel
+    /// — two rows above a card's own dismiss ×, in the same column. Drawing
+    /// both as × would put "dismiss this note" and "dismiss all of them" in the
+    /// same glyph, inches apart, with only one of them undoable. The symbol
+    /// also names what it acts on, which is the whole pile.
+    private var clearAllControl: some View {
+        Button {
+            isConfirmingClear = true
+        } label: {
+            HStack(spacing: Cairn.Space.xs) {
+                Image(systemName: "rectangle.stack.badge.minus")
+                    .font(Cairn.Typo.chromeGlyph)
+
+                // The label is what the icon cannot say on its own, offered in
+                // the one moment it is wanted: the pointer is on the control
+                // and the click has not happened yet.
+                if isClearHovering {
+                    Text(L10n.string("note.clear_all"))
+                        .font(Cairn.Typo.meta)
+                        .fixedSize()
+                        .transition(.opacity)
+                }
+            }
+            .foregroundStyle(Cairn.Ink.secondary)
+            .padding(.horizontal, isClearHovering ? Cairn.Space.lg : 0)
+            .frame(
+                minWidth: Cairn.Metrics.noteChromeHeight,
+                minHeight: Cairn.Metrics.noteChromeHeight
+            )
+            .background {
+                Capsule(style: .continuous)
+                    .fill(.ultraThinMaterial)
+            }
+            .overlay {
+                Capsule(style: .continuous)
+                    .strokeBorder(
+                        isClearHovering
+                            ? Color.white.opacity(colorScheme == .dark ? 0.28 : 0.72)
+                            : Cairn.Stroke.card(colorScheme),
+                        lineWidth: Cairn.Stroke.width
+                    )
+            }
+            .cairnShadow(.note(colorScheme))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isClearHovering = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .animation(Cairn.Motion.hover, value: isClearHovering)
+        // Confirming takes the pill out from under the cursor, so the pointing
+        // hand has to be popped on the way out or it sticks.
+        .onDisappear {
+            if isClearHovering {
+                isClearHovering = false
+                NSCursor.pop()
+            }
+        }
+        // Collapsed there is no text in it at all, so the label has to be
+        // carried here or the control is unreachable without a pointer.
+        .accessibilityLabel(L10n.string("note.clear_all"))
+        .help(L10n.string("note.clear_all.help"))
+    }
+
+    /// The question, where the control that raised it was standing.
+    ///
+    /// Dismissing one note is a click and a shrug; dismissing all of them is
+    /// the only thing in Cairn that cannot be taken back, and it now sits at
+    /// the top right of the panel, which is where a pointer already tends to
+    /// be. A dialog would be too much for a queue that owns no windows — but
+    /// the row it was clicked in can hold the question, and does.
+    private var clearConfirmation: some View {
+        HStack(spacing: Cairn.Space.sm) {
+            Text(L10n.format("note.clear_all.confirm", noteCount))
+                .font(Cairn.Typo.meta)
+                .foregroundStyle(Cairn.Ink.body)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            confirmationAction(
+                title: L10n.string("note.clear_all.confirm.yes"),
+                tint: Cairn.Status.degraded
+            ) {
+                isConfirmingClear = false
+                onClearAll()
+            }
+
+            confirmationAction(
+                title: L10n.string("note.clear_all.confirm.no"),
+                tint: Cairn.Ink.secondary
+            ) {
+                isConfirmingClear = false
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(height: Cairn.Metrics.noteChromeHeight)
+        // No bar behind it. The question is the row for as long as it is
+        // asked, and a second surface under a row that is already floating
+        // over the desktop reads as a thing that arrived rather than as the
+        // control changing what it says. The two answers keep their own
+        // backing — they are what has to stay readable over any wallpaper.
+        .transition(.opacity)
+        .onExitCommand { isConfirmingClear = false }
+    }
+
+    private func confirmationAction(
+        title: String,
+        tint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(Cairn.Typo.meta.weight(.semibold))
+                .foregroundStyle(tint)
+                .fixedSize()
+                .padding(.horizontal, Cairn.Space.md)
+                .frame(height: Cairn.Metrics.dismissTarget)
+                .background(.quaternary, in: Capsule(style: .continuous))
+                .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
         }
     }
 }
@@ -1786,6 +2407,9 @@ private struct QueueScrollObserver: NSViewRepresentable {
 private struct NoteStackRow: View {
     let stack: NoteStack
     let isExpanded: Bool
+    /// What the queue is being read through, passed down so a card can say
+    /// which of its words the search landed on.
+    var query: String = ""
     let onToggle: () -> Void
     let onDismiss: (Set<String>) -> Void
 
@@ -1794,13 +2418,14 @@ private struct NoteStackRow: View {
     @ViewBuilder
     var body: some View {
         if !stack.isStacked {
-            CompletionNote(completion: stack.newest) {
+            CompletionNote(completion: stack.newest, query: query) {
                 onDismiss([stack.newest.sessionKey])
             }
         } else if isExpanded {
             VStack(spacing: Cairn.Metrics.noteCardSpacing) {
                 CompletionNote(
                     completion: stack.newest,
+                    query: query,
                     stackCount: stack.count,
                     isStackExpanded: true,
                     onToggleStack: onToggle
@@ -1809,7 +2434,7 @@ private struct NoteStackRow: View {
                 }
 
                 ForEach(stack.older, id: \.sessionKey) { note in
-                    CompletionNote(completion: note) {
+                    CompletionNote(completion: note, query: query) {
                         onDismiss([note.sessionKey])
                     }
                 }
@@ -1820,6 +2445,7 @@ private struct NoteStackRow: View {
 
                 CompletionNote(
                     completion: stack.newest,
+                    query: query,
                     stackCount: stack.count,
                     isStackExpanded: false,
                     onToggleStack: onToggle
@@ -1867,6 +2493,9 @@ private struct NoteStackRow: View {
 
 private struct CompletionNote: View {
     let completion: CodexCompletion
+    /// The live query, or empty. A card that is on screen because of a search
+    /// owes the reader an account of why — see `bodyText`.
+    var query: String = ""
     /// How many notes this card stands for. One is a note; more is a pile, and
     /// the header grows the chip that opens it.
     var stackCount: Int = 1
@@ -1885,6 +2514,35 @@ private struct CompletionNote: View {
         stackCount > 1 && onToggleStack != nil
     }
 
+    /// Normally the opening of the answer. Under a search, the line the query
+    /// actually landed on.
+    ///
+    /// Three results that all open with "Done." are three identical cards, and
+    /// the reader is back to opening each one to find out which was meant.
+    /// Lifting the matched line is what makes a narrowed queue readable
+    /// without following any of it.
+    private var bodyText: String {
+        NoteSearch.excerpt(from: completion.result, query: query)
+            ?? completion.result.singleLine
+    }
+
+    /// The query, lit up wherever it landed.
+    ///
+    /// Same predicate as the filter — `NoteSearch` owns both — so a note can
+    /// never surface with nothing highlighted in it, which is the failure that
+    /// makes a search feel broken while it is in fact correct.
+    private func highlighted(_ text: String) -> AttributedString {
+        var attributed = AttributedString(text)
+        guard !query.isEmpty else { return attributed }
+
+        for range in NoteSearch.highlightRanges(in: text, query: query) {
+            guard let bounds = Range(range, in: attributed) else { continue }
+            attributed[bounds].backgroundColor = Cairn.Surface.searchHit(colorScheme)
+            attributed[bounds].foregroundColor = Cairn.Ink.primary
+        }
+        return attributed
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Cairn.Space.sm) {
             HStack(spacing: Cairn.Space.sm) {
@@ -1895,7 +2553,7 @@ private struct CompletionNote: View {
                         .font(Cairn.Typo.label)
                         .foregroundStyle(agent.tone.label(colorScheme))
 
-                    Text("· \(completion.contextName)")
+                    Text(highlighted("· \(completion.contextName)"))
                         .font(Cairn.Typo.meta)
                         .foregroundStyle(Cairn.Ink.secondary)
                         .lineLimit(1)
@@ -1935,12 +2593,12 @@ private struct CompletionNote: View {
             }
 
             if let prompt = completion.promptPreview {
-                Text(prompt)
+                Text(highlighted(prompt))
                     .font(Cairn.Typo.noteTitle)
                     .lineLimit(1)
             }
 
-            Text(completion.result.singleLine)
+            Text(highlighted(bodyText))
                 .font(Cairn.Typo.noteBody)
                 .foregroundStyle(Cairn.Ink.body)
                 .lineLimit(completion.promptPreview == nil ? 3 : 2)
@@ -2316,7 +2974,9 @@ private struct UpdateCheckRow: View {
     }
 }
 
-private extension String {
+extension String {
+    /// One line of it, however it arrived. Notes are drawn on cards of a fixed
+    /// height, and a search excerpt is drawn on the same one.
     var singleLine: String {
         replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "\r", with: " ")

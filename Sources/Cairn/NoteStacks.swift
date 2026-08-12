@@ -54,19 +54,52 @@ enum NoteQueue {
     static let maximumShoulders = 2
     /// The padding the stack of cards sits in.
     static let verticalPadding = Cairn.Space.lg * 2
-    /// Clearing the queue in one gesture is only worth its own control once
-    /// dismissing row by row is real work. At two rows the per-row × is faster
-    /// than reading a new affordance, so the pill starts at three.
-    static let clearAllThreshold = 3
-    /// The pill sits below the scroll view, so it costs the panel its own
-    /// height plus the bottom padding the stack used to own.
-    static let clearAllRowHeight = Cairn.Metrics.noteClearAllHeight + Cairn.Space.lg
+    /// Acting on the queue as a whole — clearing it, searching it — is only
+    /// worth a control once doing it by hand is real work. At two rows the
+    /// per-row × is faster than reading a new affordance, and two notes are
+    /// read faster than a query is typed. Both start at three.
+    static let chromeThreshold = 3
+    /// The controls sit in one row pinned above the scroll view, so they cost
+    /// the panel their own height plus the top padding the stack used to own.
+    static let chromeRowHeight = Cairn.Metrics.noteChromeHeight + Cairn.Space.lg
 
     static let minimumHeight: CGFloat = 130
     static let maximumHeight: CGFloat = 710
 
-    static func showsClearAll(for rowCount: Int) -> Bool {
-        rowCount >= clearAllThreshold
+    /// Which of the queue's own controls are on screen — asked once, by the
+    /// presenter, and handed to both the arithmetic below and the view that
+    /// draws it. The panel is sized before a single card exists, so a second
+    /// opinion about whether a row is showing is a panel cut off at the bottom.
+    struct QueueChrome: Equatable, Sendable {
+        var showsHeader = false
+        var showsClearAll = false
+        var showsEmptyResult = false
+
+        static let none = QueueChrome()
+    }
+
+    /// - Parameters:
+    ///   - noteCount: every note in the queue, filtered or not.
+    ///   - rowCount: the rows actually on screen.
+    static func chrome(
+        noteCount: Int,
+        rowCount: Int,
+        isFiltering: Bool
+    ) -> QueueChrome {
+        QueueChrome(
+            // Priced against notes rather than rows: stacking can fold ten
+            // notes from one project into a single row, and ten notes is
+            // exactly when a search stops being a novelty. The filter keeps
+            // the row alive on its own, so narrowing a search down to nothing
+            // cannot take away the field you are typing into.
+            showsHeader: noteCount >= chromeThreshold || isFiltering,
+            // Priced against rows, because rows are what it clears — and
+            // never offered mid-search, where "all" would have to mean either
+            // the matches or the queue behind them. A control with two
+            // readings and one irreversible outcome does not get to ship.
+            showsClearAll: !isFiltering && rowCount >= chromeThreshold,
+            showsEmptyResult: isFiltering && rowCount == 0
+        )
     }
 
     /// The queue as rows, newest first.
@@ -114,15 +147,27 @@ enum NoteQueue {
             * Cairn.Metrics.noteStackShoulder
     }
 
-    static func contentHeight(for stacks: [NoteStack], expandedKey: String? = nil) -> CGFloat {
-        guard !stacks.isEmpty else { return 0 }
+    static func contentHeight(
+        for stacks: [NoteStack],
+        expandedKey: String? = nil,
+        chrome: QueueChrome = .none
+    ) -> CGFloat {
+        let header = chrome.showsHeader ? chromeRowHeight : 0
+
+        guard !stacks.isEmpty else {
+            // A search that found nothing still has to stand somewhere: the
+            // field is open, and a panel that vanished under the cursor would
+            // take it with it.
+            guard chrome.showsEmptyResult else { return header }
+            return header + Cairn.Metrics.noteEmptyResultHeight + verticalPadding
+        }
 
         let rows = stacks.reduce(CGFloat.zero) { total, stack in
             total + height(of: stack, isExpanded: stack.key == expandedKey)
         }
-        return rows
+        return header
+            + rows
             + CGFloat(stacks.count - 1) * Cairn.Metrics.noteCardSpacing
             + verticalPadding
-            + (showsClearAll(for: stacks.count) ? clearAllRowHeight : 0)
     }
 }
