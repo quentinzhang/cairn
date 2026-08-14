@@ -30,8 +30,9 @@ Cairn leaves a small note where each one landed — click it to go back.
 
 ### What it does
 
-When your coding agent — say **Codex** or **Claude Code** — finishes a turn, a
-note settles beside a small stack of three river stones on your desktop.
+When your coding agent — **Codex**, **Claude Code**, **OpenClaw**, **OpenCode**,
+**Hermes**, or **DeepSeek Harness** — finishes a turn, a note settles beside a
+small stack of three river stones on your desktop.
 
 - **Never interrupts.** No Dock icon, no system notification, no window that
   takes your keyboard. Cairn reports; it never demands a reply.
@@ -39,7 +40,8 @@ note settles beside a small stack of three river stones on your desktop.
   one stack per agent per project. Fifty sessions are remembered.
 - **Follows the trail back.** Click a note and Cairn returns you to where the
   turn ran — the exact Terminal/iTerm2 tab, the app window, or the Codex
-  conversation itself.
+  conversation itself. DeepSeek Harness notes return to its Web home as a
+  best-effort trail-back, not to a conversation-specific deep link.
 - **Yours alone.** No account, no server. Everything stays on
   this Mac.
 

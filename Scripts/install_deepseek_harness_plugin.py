@@ -28,7 +28,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from cairn_payload import payload_path
 
-PLUGIN_NAME = "@cairn/deepseek-harness-plugin"
+PLUGIN_NAME = "@cairn/cairn-connector"
 PLUGIN_VERSION = "0.1.0"
 PROFILE_NAME = "web"
 SUPPORTED_DSH_VERSIONS = {"0.1.0-rc.5", "0.1.0-rc.6"}
@@ -37,7 +37,7 @@ HOME = Path.home()
 DEFAULT_DSH_HOME = HOME / ".dsh"
 CAIRN_SUPPORT = HOME / "Library" / "Application Support" / "Cairn"
 SOURCE = payload_path("DeepSeekHarnessPlugin")
-STABLE_BUNDLE = CAIRN_SUPPORT / "DeepSeekHarnessPlugin"
+STABLE_BUNDLE = CAIRN_SUPPORT / "CairnConnector"
 SELECTION_FILE = CAIRN_SUPPORT / "deepseek-harness.json"
 MARKER_FILENAME = "cairn-deepseek-harness.json"
 
@@ -256,7 +256,7 @@ def _dependency_target(spec: str, directory: Path) -> Optional[Path]:
 
 
 def _installed_package_path(directory: Path) -> Path:
-    return directory / "node_modules" / "@cairn" / "deepseek-harness-plugin"
+    return directory / "node_modules" / "@cairn" / "cairn-connector"
 
 
 def inspect_profile(dsh_home: Optional[Path] = None) -> Dict[str, Any]:
@@ -463,8 +463,8 @@ def stage_stable_bundle() -> Path:
         if not isinstance(existing, dict) or existing.get("name") != PLUGIN_NAME:
             raise InstallerError("refusing to replace unrecognized path: %s" % STABLE_BUNDLE)
 
-    staged = CAIRN_SUPPORT / (".DeepSeekHarnessPlugin.%s.pending" % uuid.uuid4().hex)
-    backup = CAIRN_SUPPORT / (".DeepSeekHarnessPlugin.%s.backup" % uuid.uuid4().hex)
+    staged = CAIRN_SUPPORT / (".CairnConnector.%s.pending" % uuid.uuid4().hex)
+    backup = CAIRN_SUPPORT / (".CairnConnector.%s.backup" % uuid.uuid4().hex)
     staged.mkdir(mode=PRIVATE_DIRECTORY_MODE)
     try:
         for name in ("package.json", "cordis.patch.yml", "index.js"):

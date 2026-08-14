@@ -3,4 +3,4 @@
 # and Web server; it contributes no tools, prompts, routes, or client code.
 - insert:
     - id: cairn-completion-relay
-      name: '@cairn/deepseek-harness-plugin'
+      name: '@cairn/cairn-connector'

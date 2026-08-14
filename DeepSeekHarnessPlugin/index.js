@@ -224,7 +224,7 @@ export function createRelay(ctx, options = {}) {
 
   const marker = {
     schema: 1,
-    plugin: "@cairn/deepseek-harness-plugin",
+    plugin: "@cairn/cairn-connector",
     plugin_version: PLUGIN_VERSION,
     dsh_version: options.dshVersion || resolveDshVersion(),
     pid: process.pid,

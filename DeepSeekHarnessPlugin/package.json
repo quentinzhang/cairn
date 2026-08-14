@@ -1,5 +1,5 @@
 {
-  "name": "@cairn/deepseek-harness-plugin",
+  "name": "@cairn/cairn-connector",
   "version": "0.1.0",
   "description": "Deliver completed DeepSeek Harness Web turns to the local Cairn inbox.",
   "type": "module",

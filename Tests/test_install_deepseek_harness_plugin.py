@@ -32,7 +32,7 @@ class DeepSeekHarnessInstallerTests(unittest.TestCase):
 
         self.patchers = [
             mock.patch.object(plugin, "CAIRN_SUPPORT", self.support),
-            mock.patch.object(plugin, "STABLE_BUNDLE", self.support / "DeepSeekHarnessPlugin"),
+            mock.patch.object(plugin, "STABLE_BUNDLE", self.support / "CairnConnector"),
             mock.patch.object(plugin, "SELECTION_FILE", self.support / "deepseek-harness.json"),
             mock.patch.object(plugin, "SOURCE", self.source),
             mock.patch.object(plugin, "_selected_home", None),
@@ -238,6 +238,35 @@ class DeepSeekHarnessInstallerTests(unittest.TestCase):
             plugin.uninstall(self.home)
             plugin.uninstall(self.home)
             self.assertEqual(sum("remove" in call for call in calls), 1)
+
+    def test_pre_release_old_cache_does_not_block_renamed_connector(self) -> None:
+        self.profile_manifest()
+        old_bundle = self.support / "DeepSeekHarnessPlugin"
+        old_bundle.mkdir(parents=True)
+        (old_bundle / "package.json").write_text(
+            json.dumps({"name": "@cairn/deepseek-harness-plugin", "version": "0.1.0"}),
+            encoding="utf-8",
+        )
+
+        def run(command, **_kwargs):
+            if "add" in command:
+                self.install_in_manifest()
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        with mock.patch.object(plugin, "discover_cli", return_value=self.cli()), mock.patch.object(
+            plugin.subprocess, "run", side_effect=run
+        ):
+            installed = plugin.install(self.home)
+
+        self.assertEqual(installed["state"], "restart_to_connect")
+        self.assertEqual(
+            json.loads((plugin.STABLE_BUNDLE / "package.json").read_text())["name"],
+            plugin.PLUGIN_NAME,
+        )
+        self.assertEqual(
+            json.loads((old_bundle / "package.json").read_text())["name"],
+            "@cairn/deepseek-harness-plugin",
+        )
 
     def test_cli_failure_restores_manifest_and_never_replaces_foreign_bundle(self) -> None:
         manifest = self.profile_manifest()
