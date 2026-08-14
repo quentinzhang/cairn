@@ -50,7 +50,7 @@ Cairn は終わった場所に小さなノートを残します——開けば�
    `.dmg` をダウンロードし、**Cairn** をアプリケーションフォルダへドラッグします。
 2. 起動します。初回起動時に、CairnがこのMacにインストール済みのコーディング
    エージェントを検出して一覧にします——現在対応しているのは **Codex**、
-   **Claude Code**、**OpenClaw**、**OpenCode**、**Hermes** です。
+   **Claude Code**、**OpenClaw**、**OpenCode**、**Hermes**、**DeepSeek Harness** です。
 3. 使っているものそれぞれで**接続**をクリックし、最後に**Cairn を使いはじめる**を
    押します。
 
@@ -72,6 +72,7 @@ Apple Silicon搭載MacとmacOS 14以降が必要です。
 | **OpenClaw** | 最終メッセージを読んでよいかを一度だけ確認し、その後は管理対象Gatewayを自動で再起動します。 |
 | **OpenCode** | すでに起動していた場合はOpenCodeを再起動してください。 |
 | **Hermes** | すでに起動していた場合はHermesを再起動してください。 |
+| **DeepSeek Harness** | Cairn 内蔵のローカル relay だけを `web` プロファイルに導入します。接続・切断後は Harness を再起動してください。Cairn は実行中のターンを停止しません。検証済み: `0.1.0-rc.5` / `0.1.0-rc.6`。 |
 
 ### 日々の使いかた
 
@@ -125,7 +126,7 @@ open dist/Cairn.app                           # 完全なローカルAppを起�
 
 `swift build` が生成するのは `.build/` 内のSwift実行ファイルとSwiftPMリソースであり、
 macOS Appの組み立ては行いません。`Scripts/build_app.sh` はreleaseビルドを実行し、
-OpenCodeを含むすべてのブリッジとランタイムプラグインを `dist/Cairn.app` にコピーし、
+OpenCodeとDeepSeek Harnessを含むすべてのブリッジとランタイムプラグインを `dist/Cairn.app` にコピーし、
 Appリソースとentitlementsを追加して完成したbundleに署名します。
 
 ### ノートが届かないときの診断
@@ -182,7 +183,7 @@ echo "Build completed successfully." | python3 Scripts/cairn_save.py \
 
 ```bash
 python3 Scripts/cairn_connect.py status              # 何を検出し、何が繋がっているか
-python3 Scripts/cairn_connect.py connect claude      # codex · claude · openclaw · opencode · hermes · skills
+python3 Scripts/cairn_connect.py connect claude      # codex · claude · openclaw · opencode · hermes · deepseek-harness · skills
 python3 Scripts/cairn_connect.py disconnect claude
 ```
 

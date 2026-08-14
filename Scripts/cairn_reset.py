@@ -96,7 +96,13 @@ def connected_runtimes() -> List[Tuple[str, str]]:
     return [
         (item["id"], item["state"])
         for item in report["runtimes"]
-        if item["state"] in {cairn_connect.CONNECTED, cairn_connect.ATTENTION}
+        if item["state"]
+        in {
+            cairn_connect.CONNECTED,
+            cairn_connect.ATTENTION,
+            cairn_connect.RESTART_TO_CONNECT,
+            cairn_connect.RESTART_TO_DISCONNECT,
+        }
     ]
 
 

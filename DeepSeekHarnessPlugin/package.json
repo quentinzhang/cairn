@@ -1,0 +1,22 @@
+{
+  "name": "@cairn/deepseek-harness-plugin",
+  "version": "0.1.0",
+  "description": "Deliver completed DeepSeek Harness Web turns to the local Cairn inbox.",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

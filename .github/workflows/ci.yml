@@ -55,6 +55,7 @@ jobs:
             cairn_reset.py \
             install_codex_hook.py \
             install_claude_hook.py \
+            install_deepseek_harness_plugin.py \
             install_hermes_plugin.py \
             install_opencode_plugin.py \
             install_openclaw_plugin.py \
@@ -68,6 +69,7 @@ jobs:
             zh-Hans.lproj/InfoPlist.strings \
             ja.lproj/InfoPlist.strings \
             AgentSkills \
+            DeepSeekHarnessPlugin \
             HermesPlugin \
             OpenClawPlugin \
             OpenCodePlugin
@@ -100,7 +102,7 @@ jobs:
           import json
           report = json.load(open("/tmp/connect.json"))
           ids = sorted(r["id"] for r in report["runtimes"])
-          assert ids == ["claude", "codex", "hermes", "openclaw", "opencode", "skills"], ids
+          assert ids == ["claude", "codex", "deepseek-harness", "hermes", "openclaw", "opencode", "skills"], ids
           print("Bundled connect bridge OK:", ids)
           PY
 
@@ -131,6 +133,9 @@ jobs:
 
       - name: A published note round-trips through the protocol
         run: /usr/bin/python3 Tests/protocol_roundtrip.py
+
+      - name: Test DeepSeek Harness profile installation
+        run: /usr/bin/python3 -m unittest -v Tests/test_install_deepseek_harness_plugin.py
 
   node:
     name: Runtime plugins
@@ -168,3 +173,15 @@ jobs:
             console.log("OpenCode plugin loads:", plugin.id);
           '
           node --test OpenCodePlugin/index.test.js
+      - name: Import and test DeepSeek Harness completion filtering
+        run: |
+          node --input-type=module -e '
+            import { apply, inject, name } from "./DeepSeekHarnessPlugin/index.js";
+            if (name !== "cairn-completion-relay" || typeof apply !== "function") {
+              throw new Error("DeepSeek Harness plugin contract is invalid");
+            }
+            if (!inject.includes("sessions") || !inject.includes("webServer")) {
+              throw new Error("DeepSeek Harness plugin injections are incomplete");
+            }
+          '
+          node --test DeepSeekHarnessPlugin/index.test.js

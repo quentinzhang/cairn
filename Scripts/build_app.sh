@@ -25,6 +25,7 @@ for script in \
   cairn_reset.py \
   install_codex_hook.py \
   install_claude_hook.py \
+  install_deepseek_harness_plugin.py \
   install_hermes_plugin.py \
   install_opencode_plugin.py \
   install_openclaw_plugin.py \
@@ -34,7 +35,8 @@ do
 done
 /bin/rm -rf "$app/Contents/Resources/AgentSkills"
 cp -R "$root/AgentSkills" "$app/Contents/Resources/AgentSkills"
-/bin/rm -rf "$app/Contents/Resources/HermesPlugin" "$app/Contents/Resources/OpenClawPlugin" "$app/Contents/Resources/OpenCodePlugin"
+/bin/rm -rf "$app/Contents/Resources/DeepSeekHarnessPlugin" "$app/Contents/Resources/HermesPlugin" "$app/Contents/Resources/OpenClawPlugin" "$app/Contents/Resources/OpenCodePlugin"
+cp -R "$root/DeepSeekHarnessPlugin" "$app/Contents/Resources/DeepSeekHarnessPlugin"
 cp -R "$root/HermesPlugin" "$app/Contents/Resources/HermesPlugin"
 cp -R "$root/OpenClawPlugin" "$app/Contents/Resources/OpenClawPlugin"
 cp -R "$root/OpenCodePlugin" "$app/Contents/Resources/OpenCodePlugin"

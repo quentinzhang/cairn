@@ -21,12 +21,17 @@ func bridgeReportDecodesEveryState() throws {
           {"id": "opencode", "state": "available", "issue": null, "message": null,
            "consent": false, "follow_up": null},
           {"id": "hermes", "state": "not_installed", "issue": null, "message": null,
-           "consent": false, "follow_up": null}
+           "consent": false, "follow_up": null},
+          {"id": "deepseek-harness", "state": "restart_to_connect", "issue": null,
+           "message": null, "consent": false, "follow_up": "deepseek_harness_restart"}
         ]}
         """
     )
 
-    #expect(runtimes.map(\.id) == ["codex", "claude", "openclaw", "opencode", "hermes"])
+    #expect(
+        runtimes.map(\.id)
+            == ["codex", "claude", "openclaw", "opencode", "hermes", "deepseek-harness"]
+    )
     #expect(runtimes[0].state == .connected)
     #expect(runtimes[0].isConnected)
     #expect(runtimes[0].followUp == "codex_trust")
@@ -37,6 +42,8 @@ func bridgeReportDecodesEveryState() throws {
     #expect(runtimes[3].state == .available)
     #expect(runtimes[4].state == .notInstalled)
     #expect(!runtimes[4].isConnected)
+    #expect(runtimes[5].state == .restartToConnect)
+    #expect(!runtimes[5].isConnected)
 }
 
 /// A newer bridge beside an older app must stay legible: an unrecognised state
@@ -91,12 +98,29 @@ func consentRefusalIsReportedAsAnIssueRatherThanACrash() throws {
 }
 
 @Test
+func restartToDisconnectRemainsActuallyConnectedUntilHarnessExits() throws {
+    let runtimes = try decodeReport(
+        """
+        {"schema": 1, "runtimes": [
+          {"id": "deepseek-harness", "state": "restart_to_disconnect", "issue": null,
+           "message": null, "consent": true, "follow_up": "deepseek_harness_restart"}
+        ]}
+        """
+    )
+    #expect(runtimes[0].state == .restartToDisconnect)
+    #expect(runtimes[0].isConnected)
+}
+
+@Test
 func everyRuntimeHasAnIdentityAndAnUnknownOneStillRenders() {
     #expect(AgentRuntimeIdentity.identity(for: "codex").name == "Codex")
     #expect(AgentRuntimeIdentity.identity(for: "claude").name == "Claude Code")
     #expect(AgentRuntimeIdentity.identity(for: "openclaw").name == "OpenClaw")
     #expect(AgentRuntimeIdentity.identity(for: "opencode").name == "OpenCode")
     #expect(AgentRuntimeIdentity.identity(for: "hermes").name == "Hermes")
+    #expect(
+        AgentRuntimeIdentity.identity(for: "deepseek-harness").name == "DeepSeek Harness"
+    )
 
     let unknown = AgentRuntimeIdentity.identity(for: "newthing")
     #expect(unknown.name == "Newthing")
@@ -107,7 +131,10 @@ func everyRuntimeHasAnIdentityAndAnUnknownOneStillRenders() {
 /// agent to connect, so it never becomes a row — and never inflates the count.
 @Test
 func theWindowShowsAgentsAndNothingElse() {
-    #expect(AgentRuntimeIdentity.all.map(\.id) == ["codex", "claude", "openclaw", "opencode", "hermes"])
+    #expect(
+        AgentRuntimeIdentity.all.map(\.id)
+            == ["codex", "claude", "openclaw", "opencode", "hermes", "deepseek-harness"]
+    )
 }
 
 /// Every code the bridge can emit needs a sentence in every language, or the
@@ -118,17 +145,24 @@ func everyBridgeCodeIsTranslatedEverywhere() throws {
         "config_invalid", "script_missing", "duplicate", "other_source", "disabled",
         "cli_missing", "foreign_plugin", "broken_link", "partial", "no_consent",
         "plugin_missing",
+        "unsupported_version",
     ]
-    let followUps = ["codex_trust", "openclaw_restart", "hermes_enable", "hermes_restart"]
+    let followUps = [
+        "codex_trust", "openclaw_restart", "hermes_enable", "hermes_restart",
+        "deepseek_harness_restart",
+    ]
     var keys = issues.map { "connect.issue.\($0)" }
     keys += followUps.map { "connect.followup.\($0)" }
     keys += [
         "connect.state.connected", "connect.state.available",
         "connect.state.not_installed", "connect.state.attention",
+        "connect.state.restart_to_connect", "connect.state.restart_to_disconnect",
         "connect.state.working", "connect.action.connect",
         "connect.action.disconnect", "connect.action.reconnect",
         "connect.action.repair", "connect.consent.title", "connect.consent.body",
         "connect.consent.allow", "connect.consent.cancel", "connect.window.title",
+        "connect.consent.openclaw.title", "connect.consent.openclaw.body",
+        "connect.consent.deepseek-harness.title", "connect.consent.deepseek-harness.body",
         "connect.title", "connect.subtitle", "connect.footer", "connect.empty",
         "connect.failure.script_missing", "connect.failure.timed_out",
         "connect.failure.unreadable", "menu.connect", "menu.connect_count",
@@ -163,7 +197,8 @@ func theBridgeAnswersForEveryRuntime() throws {
 
     let runtimes = try AgentConnectionBridge.status()
     #expect(
-        runtimes.map(\.id).sorted() == ["claude", "codex", "hermes", "openclaw", "opencode", "skills"]
+        runtimes.map(\.id).sorted()
+            == ["claude", "codex", "deepseek-harness", "hermes", "openclaw", "opencode", "skills"]
     )
     // Every agent the window lists has an answer from the bridge.
     for identity in AgentRuntimeIdentity.all {

@@ -154,6 +154,7 @@ func anUnregisteredSourceRendersGenericallyRatherThanFailing() {
     #expect(Cairn.Agent.identity(for: "hermes").name == "Hermes")
     #expect(Cairn.Agent.identity(for: "openclaw").name == "OpenClaw")
     #expect(Cairn.Agent.identity(for: "opencode").name == "OpenCode")
+    #expect(Cairn.Agent.identity(for: "deepseek-harness").name == "DeepSeek Harness")
 }
 
 @Test

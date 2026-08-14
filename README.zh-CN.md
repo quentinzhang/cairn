@@ -40,7 +40,7 @@ Cairn 在每一处完成的地方留下一枚便签——点开它，就能原�
 ### 安装
 
 1. 从 [Releases](https://github.com/quentinzhang/cairn/releases/latest) 下载已公证的 `.dmg`，把 **Cairn** 拖进"应用程序"。
-2. 打开它。首次启动时，Cairn 会检测这台 Mac 上已安装的编码代理并列出来——目前支持 **Codex**、**Claude Code**、**OpenClaw**、**OpenCode** 和 **Hermes**。
+2. 打开它。首次启动时，Cairn 会检测这台 Mac 上已安装的编码代理并列出来——目前支持 **Codex**、**Claude Code**、**OpenClaw**、**OpenCode**、**Hermes** 和 **DeepSeek Harness**。
 3. 在你在用的每一个上点**连接**，然后点**开始使用 Cairn**。
 
 设置到此为止——**不用终端，不用运行脚本，不用改任何配置文件。** 连接会为该代理安装一项 Cairn 接入，并保留无关设置；**断开**只移除 Cairn 自己的接入。标着*需要处理*的那一行，点同一个按钮即是修复。之后随时可以从 Cairn 菜单里的**应用**重新打开这个窗口。
@@ -56,6 +56,7 @@ Cairn 在每一处完成的地方留下一枚便签——点开它，就能原�
 | **OpenClaw** | Cairn 会询问一次是否允许读取最终消息，然后自动帮你重启受管 Gateway。 |
 | **OpenCode** | 如果 OpenCode 已在运行，重启它。 |
 | **Hermes** | 如果 Hermes 已在运行，重启它。 |
+| **DeepSeek Harness** | Cairn 只把自带的本地 relay 安装到 `web` Profile；连接或断开后都需要重启 Harness，且 Cairn 不会中止正在运行的任务。已验证 `0.1.0-rc.5` 与 `0.1.0-rc.6`。 |
 
 ### 日常使用
 
@@ -98,7 +99,7 @@ open dist/Cairn.app                           # 运行完整的本地 App
 
 构建需要 Xcode 16+。没有任何依赖要拉取——只使用系统框架和 Python 3 / Node.js 标准库。
 
-`swift build` 只会在 `.build/` 下生成 Swift 可执行文件和 SwiftPM 资源，不会组装 macOS App。`Scripts/build_app.sh` 会执行 release 构建，把所有桥接器和运行时插件——包括 OpenCode——复制进 `dist/Cairn.app`，再加入 App 资源、entitlements 并签名。
+`swift build` 只会在 `.build/` 下生成 Swift 可执行文件和 SwiftPM 资源，不会组装 macOS App。`Scripts/build_app.sh` 会执行 release 构建，把所有桥接器和运行时插件——包括 OpenCode 与 DeepSeek Harness——复制进 `dist/Cairn.app`，再加入 App 资源、entitlements 并签名。
 
 ### 诊断便签未出现
 
@@ -138,7 +139,7 @@ echo "Build completed successfully." | python3 Scripts/cairn_save.py \
 
 ```bash
 python3 Scripts/cairn_connect.py status              # 检测到什么、连上了什么
-python3 Scripts/cairn_connect.py connect claude      # codex · claude · openclaw · opencode · hermes · skills
+python3 Scripts/cairn_connect.py connect claude      # codex · claude · openclaw · opencode · hermes · deepseek-harness · skills
 python3 Scripts/cairn_connect.py disconnect claude
 ```
 

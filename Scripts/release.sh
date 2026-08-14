@@ -156,6 +156,9 @@ node --input-type=module -e '
   }
 '
 node --test OpenClawPlugin/index.test.js
+node --test OpenCodePlugin/index.test.js
+node --test DeepSeekHarnessPlugin/index.test.js
+/usr/bin/python3 -m unittest -v Tests/test_install_deepseek_harness_plugin.py
 
 log "Signing, notarizing and stapling release artifacts"
 package_arguments=(

@@ -46,6 +46,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import install_agent_skills
 import install_claude_hook
 import install_codex_hook
+import install_deepseek_harness_plugin
 import install_hermes_plugin
 import install_opencode_plugin
 import install_openclaw_plugin
@@ -56,12 +57,22 @@ CLAUDE_HOME = HOME / ".claude"
 HERMES_HOME = HOME / ".hermes"
 OPENCODE_HOME = HOME / ".config" / "opencode"
 
-RUNTIMES = ("codex", "claude", "openclaw", "opencode", "hermes", "skills")
+RUNTIMES = (
+    "codex",
+    "claude",
+    "openclaw",
+    "opencode",
+    "hermes",
+    "deepseek-harness",
+    "skills",
+)
 
 NOT_INSTALLED = "not_installed"
 AVAILABLE = "available"
 CONNECTED = "connected"
 ATTENTION = "attention"
+RESTART_TO_CONNECT = "restart_to_connect"
+RESTART_TO_DISCONNECT = "restart_to_disconnect"
 
 SCHEMA = 1
 
@@ -85,6 +96,7 @@ CODEX_TRUST = "codex_trust"
 OPENCLAW_RESTART = "openclaw_restart"
 HERMES_ENABLE = "hermes_enable"
 HERMES_RESTART = "hermes_restart"
+DEEPSEEK_HARNESS_RESTART = "deepseek_harness_restart"
 
 
 # --------------------------------------------------------------------------
@@ -491,12 +503,25 @@ def skills_status() -> Dict[str, Any]:
     return entry("skills", CONNECTED)
 
 
+def deepseek_harness_status() -> Dict[str, Any]:
+    status = install_deepseek_harness_plugin.status()
+    return entry(
+        "deepseek-harness",
+        status["state"],
+        status.get("issue"),
+        status.get("message"),
+        consent=bool(status.get("consent")),
+        follow_up=status.get("follow_up"),
+    )
+
+
 STATUS: Dict[str, Callable[[], Dict[str, Any]]] = {
     "codex": codex_status,
     "claude": claude_status,
     "openclaw": openclaw_status,
     "opencode": opencode_status,
     "hermes": hermes_status,
+    "deepseek-harness": deepseek_harness_status,
     "skills": skills_status,
 }
 
@@ -681,6 +706,35 @@ def disconnect_openclaw() -> Dict[str, Any]:
     return result("openclaw", True, "Plugin removed", follow_up=OPENCLAW_RESTART)
 
 
+def connect_deepseek_harness(allow_conversation_access: bool) -> Dict[str, Any]:
+    if not allow_conversation_access:
+        return {
+            "id": "deepseek-harness",
+            "ok": False,
+            "message": "",
+            "follow_up": None,
+            "issue": NEEDS_CONSENT,
+            "state": deepseek_harness_status(),
+        }
+    install_deepseek_harness_plugin.install()
+    return result(
+        "deepseek-harness",
+        True,
+        "Cairn's local bundle was added to the DeepSeek Harness web profile",
+        follow_up=DEEPSEEK_HARNESS_RESTART,
+    )
+
+
+def disconnect_deepseek_harness() -> Dict[str, Any]:
+    install_deepseek_harness_plugin.uninstall()
+    return result(
+        "deepseek-harness",
+        True,
+        "Cairn's bundle was removed from the DeepSeek Harness web profile",
+        follow_up=DEEPSEEK_HARNESS_RESTART,
+    )
+
+
 def connect_skills() -> Dict[str, Any]:
     targets = skills_targets()
     if not targets:
@@ -700,6 +754,7 @@ CONNECT: Dict[str, Callable[..., Dict[str, Any]]] = {
     "openclaw": connect_openclaw,
     "opencode": connect_opencode,
     "hermes": connect_hermes,
+    "deepseek-harness": connect_deepseek_harness,
     "skills": connect_skills,
 }
 
@@ -709,6 +764,7 @@ DISCONNECT: Dict[str, Callable[[], Dict[str, Any]]] = {
     "openclaw": disconnect_openclaw,
     "opencode": disconnect_opencode,
     "hermes": disconnect_hermes,
+    "deepseek-harness": disconnect_deepseek_harness,
     "skills": disconnect_skills,
 }
 
@@ -724,10 +780,18 @@ NAMES = {
     "openclaw": "OpenClaw",
     "opencode": "OpenCode",
     "hermes": "Hermes",
+    "deepseek-harness": "DeepSeek Harness",
     "skills": "/cairn-save skill",
 }
 
-GLYPH = {CONNECTED: "✓", AVAILABLE: "○", ATTENTION: "!", NOT_INSTALLED: "·"}
+GLYPH = {
+    CONNECTED: "✓",
+    AVAILABLE: "○",
+    ATTENTION: "!",
+    NOT_INSTALLED: "·",
+    RESTART_TO_CONNECT: "↻",
+    RESTART_TO_DISCONNECT: "↻",
+}
 
 
 def render_status(report: Dict[str, Any]) -> str:
@@ -759,7 +823,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--allow-conversation-access",
         action="store_true",
-        help="OpenClaw only: allow Cairn to read the final conversation",
+        help="allow a consent-gated plugin to read the final conversation",
+    )
+    parser.add_argument(
+        "--dsh-home",
+        type=Path,
+        help="explicit existing DSH_HOME (saved after connect/disconnect)",
     )
     return parser.parse_args()
 
@@ -788,6 +857,53 @@ def main() -> int:
     stdout_fd = reserve_stdout() if args.json else -1
     prepare_environment()
 
+    if args.dsh_home:
+        try:
+            if args.action != "status" and args.runtime != "deepseek-harness":
+                raise ValueError("--dsh-home is only valid for DeepSeek Harness")
+            install_deepseek_harness_plugin.select_dsh_home(
+                args.dsh_home,
+                persist=(
+                    args.action == "disconnect"
+                    or (
+                        args.action == "connect"
+                        and args.runtime == "deepseek-harness"
+                        and args.allow_conversation_access
+                    )
+                ),
+            )
+        except Exception as error:
+            if args.action == "status":
+                report = status_report()
+                report["runtimes"] = [
+                    entry("deepseek-harness", ATTENTION, CONFIG_INVALID, str(error), consent=True)
+                    if item["id"] == "deepseek-harness"
+                    else item
+                    for item in report["runtimes"]
+                ]
+                if args.json:
+                    emit(report, stdout_fd)
+                else:
+                    print(render_status(report))
+                return 0
+            payload = {
+                "id": args.runtime or "deepseek-harness",
+                "ok": False,
+                "message": str(error),
+                "follow_up": None,
+                "state": entry(
+                    args.runtime or "deepseek-harness",
+                    ATTENTION,
+                    CONFIG_INVALID,
+                    str(error),
+                ),
+            }
+            if args.json:
+                emit(payload, stdout_fd)
+            else:
+                print("✗ " + str(error))
+            return 1
+
     if args.action == "status":
         report = status_report()
         if args.json:
@@ -805,7 +921,7 @@ def main() -> int:
             action = CONNECT[args.runtime]
             payload = (
                 action(args.allow_conversation_access)
-                if args.runtime == "openclaw"
+                if args.runtime in {"openclaw", "deepseek-harness"}
                 else action()
             )
         else:

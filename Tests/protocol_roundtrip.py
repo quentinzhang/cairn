@@ -500,6 +500,98 @@ notify_cairn(session_id="hermes-2", assistant_response="   ")
         shutil.rmtree(home, ignore_errors=True)
 
 
+def test_deepseek_harness_plugin() -> None:
+    """Exercise the JavaScript producer and the shared doctor validator."""
+    home, inbox, environment = sandbox()
+    code = r"""
+const plugin = await import(process.argv[1]);
+const terminal = {
+  seq: 5,
+  time: Date.parse("2026-08-14T01:46:40Z"),
+  type: "turn/end",
+  data: { turn: 7, reason: { kind: "completed" } },
+};
+const session = {
+  id: "dsh-session-1",
+  header: { cwd: "/tmp/dsh-project", origin: "user", delegationDepth: 0 },
+  events: [
+    { seq: 1, type: "turn/start", data: { turn: 7 } },
+    {
+      seq: 2,
+      type: "user/message",
+      data: {
+        turn: 7,
+        source: { kind: "user" },
+        content: [{ type: "text", text: "implement the relay" }],
+      },
+    },
+    {
+      seq: 3,
+      type: "assistant/message",
+      data: {
+        turn: 7,
+        message: {
+          source: { kind: "model", model: "deepseek-v3" },
+          content: [
+            { type: "reasoning", text: "private chain of thought" },
+            { type: "text", text: "relay implemented" },
+          ],
+        },
+      },
+    },
+    terminal,
+  ],
+};
+const payload = plugin.completionPayload(session, terminal, 3080);
+await plugin.publish(payload, process.argv[2]);
+"""
+    try:
+        finished = subprocess.run(
+            [
+                "node",
+                "--input-type=module",
+                "-e",
+                code,
+                (REPO / "DeepSeekHarnessPlugin" / "index.js").as_uri(),
+                str(inbox),
+            ],
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        check(
+            finished.returncode == 0,
+            f"DeepSeekHarnessPlugin: raised into its host — {finished.stderr.strip()}",
+        )
+        payloads = published(inbox, "DeepSeekHarnessPlugin")
+        check(len(payloads) == 1, "DeepSeekHarnessPlugin: expected one completion payload")
+        for payload in payloads:
+            check(
+                payload.get("source") == "deepseek-harness"
+                and payload.get("session_id") == "dsh-session-1"
+                and payload.get("turn_id") == "7",
+                "DeepSeekHarnessPlugin: source/session/turn identity drifted",
+            )
+            check(
+                payload.get("result") == "relay implemented"
+                and payload.get("user_message") == "implement the relay",
+                "DeepSeekHarnessPlugin: did not preserve the bounded user/final projection",
+            )
+            check(
+                payload.get("model") == "deepseek-v3"
+                and payload.get("locator", {}).get("web_url") == "http://127.0.0.1:3080/",
+                "DeepSeekHarnessPlugin: model or actual Web locator drifted",
+            )
+            check(
+                "private chain of thought" not in json.dumps(payload),
+                "DeepSeekHarnessPlugin: leaked reasoning into the Inbox payload",
+            )
+    finally:
+        shutil.rmtree(home, ignore_errors=True)
+
+
 def test_validator_rejects_what_cairn_rejects() -> None:
     """The doctor's validator is only useful if it matches the app's decoder."""
     valid = {
@@ -557,6 +649,7 @@ def main() -> int:
         test_codex_hook_ignores_missing_results,
         test_codex_hook_ignores_internal_memory_turns,
         test_hermes_plugin,
+        test_deepseek_harness_plugin,
     ):
         print(f"· {test.__name__}")
         test()

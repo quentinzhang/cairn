@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from cairn_payload import ensure_private_inbox, payload_path, write_private_text
+import install_deepseek_harness_plugin
 
 HOME = Path.home()
 # The checkout root when run from a checkout; Contents/ when run from inside
@@ -784,6 +785,59 @@ def check_opencode(report: Report) -> None:
         )
 
 
+def check_deepseek_harness(report: Report) -> None:
+    report.section("DeepSeek Harness")
+    state = install_deepseek_harness_plugin.status()
+    status = state.get("state")
+    issue = state.get("issue")
+    detail = state.get("message") or ""
+    home = state.get("dsh_home")
+    if home:
+        detail = (detail + "\n" if detail else "") + "DSH_HOME: %s" % tilde(home)
+
+    if status == "not_installed":
+        report.add(INFO, "DeepSeek Harness is not installed — skipped", detail)
+    elif status == "available":
+        report.add(
+            WARN,
+            "Cairn's Web profile bundle is not connected",
+            detail,
+            "python3 %s connect deepseek-harness --allow-conversation-access"
+            % tilde(SCRIPTS / "cairn_connect.py"),
+        )
+    elif status == "restart_to_connect":
+        report.add(
+            WARN,
+            "Restart DeepSeek Harness to finish connecting",
+            "The Web profile contains Cairn, but no live Cairn marker exists yet."
+            + (("\n" + detail) if detail else ""),
+        )
+    elif status == "connected":
+        port = state.get("port")
+        report.add(
+            OK,
+            "Cairn's bundle is live in the Web profile",
+            (("Harness Web port: %s\n" % port) if port else "") + detail,
+        )
+    elif status == "restart_to_disconnect":
+        report.add(
+            WARN,
+            "Restart DeepSeek Harness to finish disconnecting",
+            "The profile no longer contains Cairn, but the running process can still publish."
+            + (("\n" + detail) if detail else ""),
+        )
+    else:
+        level = FAIL if issue in {"config_invalid", "foreign_plugin"} else WARN
+        labels = {
+            "cli_missing": "The selected profile exists, but no usable dsh CLI was found",
+            "unsupported_version": "This DeepSeek Harness version is unverified",
+            "foreign_plugin": "An external bundle uses Cairn's DeepSeek Harness package name",
+            "config_invalid": "The DeepSeek Harness Web profile cannot be read safely",
+            "partial": "The DeepSeek Harness profile bundle is only partially configured",
+        }
+        report.add(level, labels.get(issue, "DeepSeek Harness needs attention"), detail)
+
+
 def check_skills(report: Report) -> None:
     report.section("Deliberate saves (cairn-save skill)")
 
@@ -897,6 +951,7 @@ def main() -> int:
     check_hermes(report)
     check_openclaw(report)
     check_opencode(report)
+    check_deepseek_harness(report)
     check_skills(report)
     if arguments.probe:
         probe(report)
