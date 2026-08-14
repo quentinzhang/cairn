@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cairn 跡 — A trail for every task</title>
-<meta name="description" content="A quiet macOS companion for your coding agents. When a turn completes, Cairn leaves a small floating note. No dock icon, no notifications, no interruptions.">
+<meta name="description" content="A quiet macOS companion for coding agents, including DeepSeek Harness. When a turn completes, Cairn leaves a small floating note. No Dock icon, no notifications, no interruptions.">
 <script>
 /* Apply a saved theme before first paint; unset means "follow the system",
    in which case the prefers-color-scheme block below is the source of truth. */
@@ -55,6 +55,7 @@
   --claude-rail: #C2643E;  --claude-label: #9E4C28;  --claude-hue: #D97757;
   --claw-rail:   #1F78BF;  --claw-label:   #1A5F97;  --claw-hue:  #1F78BF;
   --opencode-rail: #657F28; --opencode-label: #4E651C; --opencode-hue: #7E9C3A;
+  --deepseek-rail: #4057D6; --deepseek-label: #3143B4; --deepseek-hue: #4D6BFE;
 
   --wash-pct: 8%;
   --shadow-note: 0 6px 12px rgba(13, 31, 36, .10);
@@ -81,6 +82,7 @@
     --claude-rail: #E08A66;  --claude-label: #F0A585;
     --claw-rail:   #3E96D8;  --claw-label:   #5CACE8;
     --opencode-rail: #A8C95B; --opencode-label: #BEDC78;
+    --deepseek-rail: #8EA1FF; --deepseek-label: #AAB7FF;
 
     --crown-lit:  #DCEFBB;
     --crown-shade:#7FBF86;
@@ -106,6 +108,7 @@
   --claude-rail: #C2643E;  --claude-label: #9E4C28;
   --claw-rail:   #1F78BF;  --claw-label:   #1A5F97;
   --opencode-rail: #657F28; --opencode-label: #4E651C;
+  --deepseek-rail: #4057D6; --deepseek-label: #3143B4;
   --crown-lit:  #B7DE93;
   --crown-shade:#45895A;
   --beacon-glow-alpha: .16;
@@ -128,6 +131,7 @@
   --claude-rail: #E08A66;  --claude-label: #F0A585;
   --claw-rail:   #3E96D8;  --claw-label:   #5CACE8;
   --opencode-rail: #A8C95B; --opencode-label: #BEDC78;
+  --deepseek-rail: #8EA1FF; --deepseek-label: #AAB7FF;
   --crown-lit:  #DCEFBB;
   --crown-shade:#7FBF86;
   --beacon-glow-alpha: .42;
@@ -454,6 +458,7 @@ section {
 .note.claude { --note-hue: var(--claude-hue); --note-rail: var(--claude-rail); --note-label: var(--claude-label); }
 .note.claw   { --note-hue: var(--claw-hue);   --note-rail: var(--claw-rail);   --note-label: var(--claw-label); }
 .note.opencode { --note-hue: var(--opencode-hue); --note-rail: var(--opencode-rail); --note-label: var(--opencode-label); }
+.note.deepseek { --note-hue: var(--deepseek-hue); --note-rail: var(--deepseek-rail); --note-label: var(--deepseek-label); }
 
 .control {
   position: relative;
@@ -587,6 +592,7 @@ section {
 .agent.claude { --mark: var(--claude-rail); }
 .agent.claw   { --mark: var(--claw-rail); }
 .agent.opencode { --mark: var(--opencode-rail); }
+.agent.deepseek { --mark: var(--deepseek-rail); }
 
 .mark {
   width: 15px; height: 15px;
@@ -799,7 +805,7 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
 
       <p class="tagline" data-i18n="tagline">A trail for every task.</p>
 
-      <p class="sub" data-i18n="sub">Every agent you start is another line left dangling in your head. Cairn is a quiet desktop companion for coding agents: when Codex, Claude Code, OpenClaw, OpenCode or Hermes finishes, its answer settles into a note beside your screen instead. No notification, no stolen focus — and one click lands you back where it started.</p>
+      <p class="sub" data-i18n="sub">Every agent you start is another line left dangling in your head. Cairn is a quiet desktop companion for coding agents: when Codex, Claude Code, OpenClaw, OpenCode, Hermes, or DeepSeek Harness finishes, its answer settles into a note beside your screen instead. No notification, no stolen focus — and one click lands you back where it started.</p>
 
       <div class="cta-row">
         <a class="cta" id="cta-download" href="https://github.com/quentinzhang/cairn/releases/latest" data-i18n="cta">Download for macOS</a>
@@ -858,7 +864,7 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
       <div class="step">
         <span class="step-dot" aria-hidden="true">1</span>
         <h2 data-i18n="step1t">A turn finishes</h2>
-        <p data-i18n="step1b">Codex, Claude Code, OpenClaw, OpenCode, or Hermes completes a task — maybe in a window you left an hour ago.</p>
+        <p data-i18n="step1b">Codex, Claude Code, OpenClaw, OpenCode, Hermes, or DeepSeek Harness completes a task — maybe in a window you left an hour ago.</p>
       </div>
       <div class="step">
         <span class="step-dot" aria-hidden="true">2</span>
@@ -902,6 +908,7 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
       <span class="agent claude"><svg class="mark" aria-hidden="true"><use href="#mark-claude"/></svg>Claude Code</span>
       <span class="agent claw"><svg class="mark" aria-hidden="true"><use href="#mark-claw"/></svg>OpenClaw</span>
       <span class="agent opencode"><i class="letter" aria-hidden="true">O</i>OpenCode</span>
+      <span class="agent deepseek"><i class="letter" aria-hidden="true">D</i>DeepSeek Harness</span>
     </div>
   </section>
 
@@ -925,12 +932,12 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
       _sealLang: "ja",
       _title: "Cairn — A trail for every task",
       tagline: "A trail for every task.",
-      sub: "Every agent you start is another line left dangling in your head. Cairn is a quiet desktop companion for coding agents: when Codex, Claude Code, OpenClaw, OpenCode or Hermes finishes, its answer settles into a note beside your screen instead. No notification, no stolen focus — and one click lands you back where it started.",
+      sub: "Every agent you start is another line left dangling in your head. Cairn is a quiet desktop companion for coding agents: when Codex, Claude Code, OpenClaw, OpenCode, Hermes, or DeepSeek Harness finishes, its answer settles into a note beside your screen instead. No notification, no stolen focus — and one click lands you back where it started.",
       cta: "Download for macOS",
       ctanote: "macOS 14+ · Apple Silicon · Free and open source · Local only",
       lblTrail: "THE TRAIL",
       step1t: "A turn finishes",
-      step1b: "Codex, Claude Code, OpenClaw, OpenCode, or Hermes completes a task — maybe in a window you left an hour ago.",
+      step1b: "Codex, Claude Code, OpenClaw, OpenCode, Hermes, or DeepSeek Harness completes a task — maybe in a window you left an hour ago.",
       step2t: "A note settles",
       step2b: "It lands quietly beside the stones. No sound, no banner, no stolen focus — it waits until you look.",
       step3t: "Click to trace back",
@@ -966,12 +973,12 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
       _sealLang: "zh-Hans",
       _title: "Cairn 迹 — 让每一次任务都有迹可循",
       tagline: "让每一次任务都有迹可循。",
-      sub: "每开一个 agent，脑子里就多悬一根线。Cairn 是 coding agent 的桌面伴侣，静静住在你的 macOS 桌面上：Codex、Claude Code、OpenClaw、OpenCode、Hermes 每交付一次，答案就落成一枚便签，替你收着。不发通知，不抢焦点——想看时点开，一下就回到它出发的地方。",
+      sub: "每开一个 agent，脑子里就多悬一根线。Cairn 是 coding agent 的桌面伴侣，静静住在你的 macOS 桌面上：Codex、Claude Code、OpenClaw、OpenCode、Hermes、DeepSeek Harness 每交付一次，答案就落成一枚便签，替你收着。不发通知，不抢焦点——想看时点开，一下就回到它出发的地方。",
       cta: "下载 macOS 版",
       ctanote: "macOS 14+ · Apple Silicon · 免费开源 · 只在本地",
       lblTrail: "一道迹",
       step1t: "一轮完成",
-      step1b: "Codex、Claude Code、OpenClaw、OpenCode 或 Hermes 交付了成果——也许在一个你一小时前就离开的窗口里。",
+      step1b: "Codex、Claude Code、OpenClaw、OpenCode、Hermes 或 DeepSeek Harness 交付了成果——也许在一个你一小时前就离开的窗口里。",
       step2t: "便签落下",
       step2b: "它静静落在石堆旁。没有声音，没有横幅，不抢焦点——只等你看过来。",
       step3t: "点开，循迹返回",
@@ -1007,12 +1014,12 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
       _sealLang: "ja",
       _title: "Cairn 跡 — すべてのタスクを、たどれる跡に。",
       tagline: "すべてのタスクを、たどれる跡に。",
-      sub: "エージェントを一つ動かすたび、頭の中に糸が一本垂れたままになる。Cairn は coding agent のための、macOS の静かなデスクトップの相棒です。Codex、Claude Code、OpenClaw、OpenCode、Hermes が仕事を終えると、その答えは画面のわきの小さなノートに収まります。通知は出さず、フォーカスも奪いません。開けば、始まった場所へ一度で戻れます。",
+      sub: "エージェントを一つ動かすたび、頭の中に糸が一本垂れたままになる。Cairn は coding agent のための、macOS の静かなデスクトップの相棒です。Codex、Claude Code、OpenClaw、OpenCode、Hermes、DeepSeek Harness が仕事を終えると、その答えは画面のわきの小さなノートに収まります。通知は出さず、フォーカスも奪いません。開けば、始まった場所へ一度で戻れます。",
       cta: "macOS版をダウンロード",
       ctanote: "macOS 14以降 · Apple Silicon · 無料・オープンソース · ローカルのみ",
       lblTrail: "跡のみち",
       step1t: "ターンが終わる",
-      step1b: "Codex、Claude Code、OpenClaw、OpenCode、Hermes がタスクを終えます——一時間前に離れたウィンドウの中かもしれません。",
+      step1b: "Codex、Claude Code、OpenClaw、OpenCode、Hermes、DeepSeek Harness がタスクを終えます——一時間前に離れたウィンドウの中かもしれません。",
       step2t: "ノートが舞い降りる",
       step2b: "石積みのそばに、音もなく。バナーもなく、フォーカスも奪わず——あなたが見るまで待っています。",
       step3t: "クリックで跡をたどる",
@@ -1072,13 +1079,14 @@ footer a:hover { color: var(--ink); text-decoration: underline; text-underline-o
     renderTheme(next, currentDict);
   });
 
-  // ---- the floating queue: five agents, two visible, rotating --------
+  // ---- the floating queue: six agents, two visible, rotating --------
   var MOCKS = [
     { cls: "claude",   mark: "claude", agent: "Claude Code", ctx: "Cairn",      pk: "mock1p", rk: "mock1r" },
     { cls: "codex",    mark: "codex",  agent: "Codex",       ctx: "api-server", pk: "mock2p", rk: "mock2r" },
     { cls: "claw",     mark: "claw",   agent: "OpenClaw",    ctx: "Telegram",   pk: "mock3p", rk: "mock3r" },
     { cls: "hermes",   mark: null,     agent: "Hermes",      ctx: "Desktop",    pk: "mock4p", rk: "mock4r" },
-    { cls: "opencode", mark: null,     agent: "OpenCode",    ctx: "Cairn",      pk: "mock1p", rk: "mock1r" }
+    { cls: "opencode", mark: null,     agent: "OpenCode",    ctx: "Cairn",      pk: "mock1p", rk: "mock1r" },
+    { cls: "deepseek", mark: null,     agent: "DeepSeek Harness", ctx: "Harness Web", pk: "mock2p", rk: "mock2r" }
   ];
 
   function markup(mock) {

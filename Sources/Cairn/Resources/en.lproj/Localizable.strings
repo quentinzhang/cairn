@@ -131,6 +131,8 @@
 "connect.state.available" = "Ready to connect";
 "connect.state.not_installed" = "Not installed";
 "connect.state.attention" = "Needs attention";
+"connect.state.restart_to_connect" = "Restart Harness to connect";
+"connect.state.restart_to_disconnect" = "Restart Harness to disconnect";
 "connect.state.working" = "Working…";
 
 "connect.action.connect" = "Connect";
@@ -150,14 +152,20 @@
 "connect.issue.partial" = "Installed for one agent only.";
 "connect.issue.no_consent" = "Conversation access not granted yet.";
 "connect.issue.plugin_missing" = "Cairn's plugin files are missing.";
+"connect.issue.unsupported_version" = "This DeepSeek Harness version has not been verified with Cairn.";
 
 "connect.followup.codex_trust" = "Run /hooks inside Codex once and trust the Cairn handler.";
 "connect.followup.openclaw_restart" = "Restart the OpenClaw desktop client if it was already running.";
 "connect.followup.hermes_enable" = "Run: hermes plugins enable cairn";
 "connect.followup.hermes_restart" = "Restart Hermes to apply this. A gateway or session already running keeps the old setting until it does.";
+"connect.followup.deepseek_harness_restart" = "Restart DeepSeek Harness to apply the Web profile change. Cairn will not stop a running turn for you.";
 
 "connect.consent.title" = "Let Cairn read OpenClaw's final message?";
 "connect.consent.body" = "OpenClaw asks before a plugin can read a conversation. Cairn keeps only the last prompt and the final reply, on this Mac.";
+"connect.consent.openclaw.title" = "Let Cairn read OpenClaw's final message?";
+"connect.consent.openclaw.body" = "OpenClaw asks before a plugin can read a conversation. Cairn keeps only the last prompt and the final reply, on this Mac.";
+"connect.consent.deepseek-harness.title" = "Let Cairn observe completed DeepSeek Harness turns?";
+"connect.consent.deepseek-harness.body" = "The local plugin can observe Harness session events. Cairn saves only the latest real user prompt and final reply — never reasoning, tool arguments, results, or the full trajectory — and keeps them on this Mac.";
 "connect.consent.allow" = "Allow and Connect";
 "connect.consent.cancel" = "Cancel";
 

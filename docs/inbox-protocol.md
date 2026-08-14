@@ -272,6 +272,33 @@ route: Cairn falls back to the recorded app and workspace-title hints. Finder is
 used only after no GUI host can be resolved, never as the fallback for a known
 running editor.
 
+### 7.1 DeepSeek Harness Web
+
+The bundled DeepSeek Harness producer is the prebuilt Cordis bundle in
+`DeepSeekHarnessPlugin/`. It supports the verified `0.1.0-rc.5` and
+`0.1.0-rc.6` event contract and mounts only in the selected `web` profile. A
+future or otherwise unknown version is shown as unverified rather than
+connected.
+
+It observes committed `session/event` records but publishes only a top-level
+`turn/end` whose reason is `completed`. From that turn it keeps the latest
+real user-source text and final non-empty assistant text. Subagents, aborted or
+failed turns, reasoning blocks, tool arguments/results, and the full trajectory
+never enter Cairn. Publishing is queued, atomic, private (directory `0700`,
+file `0600`), and fail-open so a missing Cairn inbox cannot fail the Harness
+turn.
+
+`locator.web_url` records `http://127.0.0.1:<actual-port>/` from the injected
+live Web server, including OS-assigned ports. This is a best-effort return to
+the Harness root, not a conversation deep link or panel synchronization. A
+note made before a dynamic-port restart may retain an old URL.
+
+Connect/Disconnect manages only Cairn's local bundle and the explicitly
+selected `web` profile. It does not install, upgrade, build, stop, or restart
+Harness and does not touch another profile. Profile changes do not hot-load:
+the UI distinguishes restart-to-connect and restart-to-disconnect using the
+profile manifest plus a process-owned runtime marker.
+
 ## 8. Reliability rules for producers
 
 These are non-negotiable, and every bundled bridge follows them:

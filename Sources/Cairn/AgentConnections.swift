@@ -21,6 +21,8 @@ enum AgentConnectionState: String, Decodable, Sendable {
     case available
     case connected
     case attention
+    case restartToConnect = "restart_to_connect"
+    case restartToDisconnect = "restart_to_disconnect"
 
     init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
@@ -33,6 +35,8 @@ enum AgentConnectionState: String, Decodable, Sendable {
         case .available: L10n.string("connect.state.available")
         case .connected: L10n.string("connect.state.connected")
         case .attention: L10n.string("connect.state.attention")
+        case .restartToConnect: L10n.string("connect.state.restart_to_connect")
+        case .restartToDisconnect: L10n.string("connect.state.restart_to_disconnect")
         }
     }
 
@@ -42,6 +46,7 @@ enum AgentConnectionState: String, Decodable, Sendable {
         case .available: "circle"
         case .connected: "checkmark.circle.fill"
         case .attention: "exclamationmark.circle.fill"
+        case .restartToConnect, .restartToDisconnect: "arrow.clockwise.circle.fill"
         }
     }
 }
@@ -70,7 +75,8 @@ struct AgentConnectionStatus: Decodable, Identifiable, Equatable, Sendable {
         case followUp = "follow_up"
     }
 
-    var isConnected: Bool { state == .connected }
+    /// A runtime waiting to disconnect is still live and can still publish.
+    var isConnected: Bool { state == .connected || state == .restartToDisconnect }
 }
 
 struct AgentConnectionReport: Decodable, Sendable {
@@ -259,6 +265,11 @@ struct AgentRuntimeIdentity: Sendable {
         AgentRuntimeIdentity(id: "openclaw", name: "OpenClaw", toneSource: "openclaw"),
         AgentRuntimeIdentity(id: "opencode", name: "OpenCode", toneSource: "opencode"),
         AgentRuntimeIdentity(id: "hermes", name: "Hermes", toneSource: "hermes"),
+        AgentRuntimeIdentity(
+            id: "deepseek-harness",
+            name: "DeepSeek Harness",
+            toneSource: "deepseek-harness"
+        ),
     ]
 
     static func identity(for id: String) -> AgentRuntimeIdentity {
@@ -333,7 +344,11 @@ final class AgentConnectionCenter: ObservableObject {
     /// Detected but not yet connected — what decides whether Cairn offers the
     /// window on a first launch.
     var pendingCount: Int {
-        agents.filter { $0.state == .available || $0.state == .attention }.count
+        agents.filter {
+            $0.state == .available
+                || $0.state == .attention
+                || $0.state == .restartToConnect
+        }.count
     }
 
     /// Which coding agents are actually sending Cairn their turns, in the fixed
@@ -389,7 +404,7 @@ final class AgentConnectionCenter: ObservableObject {
 
     func connect(_ id: String) {
         guard let status = status(for: id) else { return }
-        if id == "openclaw", status.consent {
+        if status.consent {
             askForConsentThenConnect(id)
             return
         }
@@ -400,7 +415,7 @@ final class AgentConnectionCenter: ObservableObject {
     /// from a press that did not register, and the row simply settling back to
     /// "ready to connect" reads as a failure with no cause.
     private func askForConsentThenConnect(_ id: String) {
-        requestConversationConsent { [weak self] allowed in
+        requestConversationConsent(for: id) { [weak self] allowed in
             guard let self else { return }
             guard allowed else {
                 self.annotate(id, issue: "no_consent")
@@ -619,10 +634,21 @@ final class AgentConnectionCenter: ObservableObject {
         )
     }
 
-    private func requestConversationConsent(_ completion: @escaping (Bool) -> Void) {
+    private func requestConversationConsent(
+        for id: String,
+        _ completion: @escaping (Bool) -> Void
+    ) {
         let alert = NSAlert()
-        alert.messageText = L10n.string("connect.consent.title")
-        alert.informativeText = L10n.string("connect.consent.body")
+        let titleKey = "connect.consent.\(id).title"
+        let bodyKey = "connect.consent.\(id).body"
+        let localizedTitle = L10n.string(titleKey)
+        let localizedBody = L10n.string(bodyKey)
+        alert.messageText = localizedTitle == titleKey
+            ? L10n.string("connect.consent.title")
+            : localizedTitle
+        alert.informativeText = localizedBody == bodyKey
+            ? L10n.string("connect.consent.body")
+            : localizedBody
         alert.alertStyle = .informational
         alert.addButton(withTitle: L10n.string("connect.consent.allow"))
         alert.addButton(withTitle: L10n.string("connect.consent.cancel"))
@@ -799,7 +825,7 @@ private struct AgentConnectionRow: View {
                     systemImage: isBusy ? "ellipsis" : status.state.symbol
                 )
                 .font(.caption)
-                .foregroundStyle(status.isConnected ? Cairn.Status.listening : Cairn.Ink.tertiary)
+                .foregroundStyle(status.state == .connected ? Cairn.Status.listening : Cairn.Ink.tertiary)
 
                 controls
             }
@@ -828,10 +854,19 @@ private struct AgentConnectionRow: View {
                     .controlSize(.small)
                     .disabled(isBusy)
             case .attention:
-                Button(L10n.string("connect.action.repair"), action: connect)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .disabled(isBusy)
+                if identity.id == "deepseek-harness",
+                   status.issue == "unsupported_version",
+                   !status.consent {
+                    Button(L10n.string("connect.action.disconnect"), action: disconnect)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(isBusy)
+                } else {
+                    Button(L10n.string("connect.action.repair"), action: connect)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(isBusy)
+                }
             case .connected:
                 if status.issue != nil {
                     Button(L10n.string("connect.action.reconnect"), action: connect)
@@ -840,6 +875,16 @@ private struct AgentConnectionRow: View {
                         .disabled(isBusy)
                 }
                 Button(L10n.string("connect.action.disconnect"), action: disconnect)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(isBusy)
+            case .restartToConnect:
+                Button(L10n.string("connect.action.disconnect"), action: disconnect)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(isBusy)
+            case .restartToDisconnect:
+                Button(L10n.string("connect.action.connect"), action: connect)
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(isBusy)

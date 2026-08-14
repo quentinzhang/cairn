@@ -35,6 +35,7 @@ func shippedIconsNameAgentsCairnKnows() {
 @Test @MainActor
 func agentsWithoutAMarkResolveToNothing() {
     #expect(AgentIconAsset.image(for: "hermes") == nil)
+    #expect(AgentIconAsset.image(for: "deepseek-harness") == nil)
     #expect(AgentIconAsset.image(for: "not-an-agent") == nil)
 }
 

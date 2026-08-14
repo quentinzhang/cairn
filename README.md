@@ -30,8 +30,9 @@ Cairn leaves a small note where each one landed — click it to go back.
 
 ### What it does
 
-When your coding agent — say **Codex** or **Claude Code** — finishes a turn, a
-note settles beside a small stack of three river stones on your desktop.
+When your coding agent — **Codex**, **Claude Code**, **OpenClaw**, **OpenCode**,
+**Hermes**, or **DeepSeek Harness** — finishes a turn, a note settles beside a
+small stack of three river stones on your desktop.
 
 - **Never interrupts.** No Dock icon, no system notification, no window that
   takes your keyboard. Cairn reports; it never demands a reply.
@@ -39,7 +40,8 @@ note settles beside a small stack of three river stones on your desktop.
   one stack per agent per project. Fifty sessions are remembered.
 - **Follows the trail back.** Click a note and Cairn returns you to where the
   turn ran — the exact Terminal/iTerm2 tab, the app window, or the Codex
-  conversation itself.
+  conversation itself. DeepSeek Harness notes return to its Web home as a
+  best-effort trail-back, not to a conversation-specific deep link.
 - **Yours alone.** No account, no server. Everything stays on
   this Mac.
 
@@ -50,7 +52,7 @@ note settles beside a small stack of three river stones on your desktop.
    **Cairn** into Applications.
 2. Open it. On first launch Cairn finds the coding agents installed on this Mac
    and lists them — today **Codex**, **Claude Code**, **OpenClaw**,
-   **OpenCode**, and **Hermes**.
+   **OpenCode**, **Hermes**, and **DeepSeek Harness**.
 3. Click **Connect** on each one you use, then **Start Using Cairn**.
 
 That is the whole setup — **no terminal, no scripts, no config files to edit.**
@@ -71,6 +73,7 @@ right after you connect:
 | **OpenClaw** | Cairn asks once whether it may read the final message, then restarts the managed Gateway for you. |
 | **OpenCode** | Restart OpenCode if it was already running. |
 | **Hermes** | Restart Hermes if it was already running. |
+| **DeepSeek Harness** | Cairn installs only its bundled local relay into the `web` profile. Restart Harness after connecting or disconnecting; Cairn never interrupts a running turn. Verified with `0.1.0-rc.5` and `0.1.0-rc.6`. |
 
 ### Everyday use
 
@@ -125,7 +128,7 @@ frameworks and the Python 3 / Node.js standard libraries.
 `swift build` produces the Swift executable and SwiftPM resources under
 `.build/`; it does not assemble a macOS App. `Scripts/build_app.sh` performs
 the release build, copies every bridge and runtime plugin — including
-OpenCode — into `dist/Cairn.app`, adds the App resources and entitlements, and
+OpenCode and DeepSeek Harness — into `dist/Cairn.app`, adds the App resources and entitlements, and
 signs the finished bundle.
 
 ### Diagnose missing notes
@@ -182,7 +185,7 @@ Everything the Connect window does is available from the checkout:
 
 ```bash
 python3 Scripts/cairn_connect.py status              # what is detected, what is wired
-python3 Scripts/cairn_connect.py connect claude      # codex · claude · openclaw · opencode · hermes · skills
+python3 Scripts/cairn_connect.py connect claude      # codex · claude · openclaw · opencode · hermes · deepseek-harness · skills
 python3 Scripts/cairn_connect.py disconnect claude
 ```
 

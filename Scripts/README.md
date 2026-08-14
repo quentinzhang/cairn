@@ -12,7 +12,7 @@ All examples assume the repository root as the current directory.
 | Script | Purpose | Direct use and side effects |
 | --- | --- | --- |
 | [`build_app.sh`](build_app.sh) | Builds the Swift target in release mode, assembles the complete `dist/Cairn.app`, copies every bridge and plugin, adds resources and entitlements, and signs the bundle. | **Run directly.** Writes `.build/` and `dist/`; it does not install the App or publish a release. |
-| [`cairn_connect.py`](cairn_connect.py) | Reports every supported runtime and connects or disconnects Codex, Claude Code, OpenClaw, OpenCode, Hermes, and the optional `cairn-save` skills. This is the backend used by the App's **Apps** window. | **Run directly.** `status` is read-only. `connect` and `disconnect` modify agent configuration; OpenClaw operations can restart its Gateway. |
+| [`cairn_connect.py`](cairn_connect.py) | Reports every supported runtime and connects or disconnects Codex, Claude Code, OpenClaw, OpenCode, Hermes, DeepSeek Harness, and the optional `cairn-save` skills. This is the backend used by the App's **Apps** window. | **Run directly.** `status` is read-only. `connect` and `disconnect` modify agent configuration. DeepSeek Harness profile changes require a user restart; Cairn never restarts it. |
 | [`cairn_doctor.py`](cairn_doctor.py) | Diagnoses missing notes, stale hooks, plugin state, malformed inbox payloads, and duplicate App copies. | **Run directly.** The default check is read-only; `--probe` publishes and consumes a real test note. |
 | [`cairn_reset.py`](cairn_reset.py) | Returns this Mac to Cairn's first-run state so onboarding can be exercised again. | **Run directly with care.** The default is a dry run. `--yes` quits Cairn, disconnects agents, deletes Cairn notes and preferences, and resets Accessibility and Automation grants unless the matching `--keep-*` flags are supplied. |
 | [`cairn_save.py`](cairn_save.py) | Publishes a deliberate note to Cairn from a human, an agent skill, CI, or another local process. | **Run directly.** Writes one atomic payload into Cairn's inbox; it does not change agent configuration. |
@@ -38,11 +38,13 @@ cannot break the agent.
 | [`cairn_codex_hook.py`](cairn_codex_hook.py) | Handles Codex `Stop` events, extracts the final assistant result and latest user prompt from the transcript, ignores internal memory work, captures trail metadata, and publishes a Cairn payload. | **Runtime-invoked.** Reads JSON from stdin and may write an inbox payload. It is not a diagnostic command. |
 | [`cairn_claude_hook.py`](cairn_claude_hook.py) | Handles Claude Code `Stop` events, prefers `last_assistant_message`, uses the transcript for compatible fallback and prompt recovery, captures trail metadata, and publishes a Cairn payload. | **Runtime-invoked.** Reads JSON from stdin and may write an inbox payload. It is not a diagnostic command. |
 
-Hermes, OpenClaw, and OpenCode use the source-backed plugin directories at the
+Hermes, OpenClaw, OpenCode, and DeepSeek Harness use plugin directories at the
 repository root rather than Python hook scripts:
 [`HermesPlugin/`](../HermesPlugin/),
 [`OpenClawPlugin/`](../OpenClawPlugin/), and
-[`OpenCodePlugin/`](../OpenCodePlugin/).
+[`OpenCodePlugin/`](../OpenCodePlugin/). The
+[`DeepSeekHarnessPlugin/`](../DeepSeekHarnessPlugin/) bundle is copied to a
+stable Application Support path before the selected `web` profile links it.
 
 ## Shared implementation modules
 
@@ -61,13 +63,16 @@ for integration development and recovery.
 | --- | --- | --- |
 | [`install_codex_hook.py`](install_codex_hook.py) | Adds or removes Cairn's Codex `Stop` handler while preserving every unrelated hook. | **Low-level, mutating.** Updates `~/.codex/hooks.json`. |
 | [`install_claude_hook.py`](install_claude_hook.py) | Adds or removes Cairn's Claude Code `Stop` handler while preserving unrelated settings and hooks. | **Low-level, mutating.** Updates `~/.claude/settings.json`. |
+| [`install_deepseek_harness_plugin.py`](install_deepseek_harness_plugin.py) | Copies Cairn's prebuilt Cordis bundle to stable local storage, discovers a global CLI or verified running source checkout, and idempotently adds/removes it from one `web` profile. | **Low-level, mutating.** Never installs or upgrades DSH and never uses `npx`; supports an explicit `--dsh-home` and reports restart-pending live-marker state. |
 | [`install_hermes_plugin.py`](install_hermes_plugin.py) | Links the source-backed Cairn plugin into Hermes and enables or disables it through the Hermes CLI. | **Low-level, mutating.** Manages `~/.hermes/plugins/cairn` and Hermes plugin state; refuses to replace a real directory. |
 | [`install_openclaw_plugin.py`](install_openclaw_plugin.py) | Installs or removes the Cairn OpenClaw plugin, manages conversation-access compatibility, and can restart the managed Gateway. | **Low-level, mutating.** Changes OpenClaw plugin configuration and may restart its Gateway. |
 | [`install_opencode_plugin.py`](install_opencode_plugin.py) | Links Cairn's OpenCode plugin into OpenCode without editing its config file. | **Low-level, mutating.** Manages `~/.config/opencode/plugins/cairn.js`; refuses to replace a real file or directory. |
 | [`install_agent_skills.py`](install_agent_skills.py) | Installs or removes the `cairn-save` wrapper for Claude Code and Codex. | **Low-level, mutating.** Writes `~/.claude/skills/cairn-save/SKILL.md` and `~/.codex/prompts/cairn-save.md`. |
 
-Each installer accepts `install` or `uninstall`; omitting the action defaults
-to `install`. OpenClaw additionally exposes consent and Gateway restart flags.
+The legacy installers accept `install` or `uninstall`; omitting the action
+defaults to `install`. The DeepSeek Harness installer additionally exposes a
+read-only `status` action and requires an explicit action. OpenClaw exposes
+consent and Gateway restart flags.
 
 ## Build, artwork, and release operations
 

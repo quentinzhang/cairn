@@ -131,6 +131,8 @@
 "connect.state.available" = "接続できます";
 "connect.state.not_installed" = "未インストール";
 "connect.state.attention" = "確認が必要";
+"connect.state.restart_to_connect" = "Harness の再起動後に接続";
+"connect.state.restart_to_disconnect" = "Harness の再起動後に切断";
 "connect.state.working" = "処理中…";
 
 "connect.action.connect" = "接続";
@@ -150,14 +152,20 @@
 "connect.issue.partial" = "片方のエージェントにのみインストールされています。";
 "connect.issue.no_consent" = "会話へのアクセスがまだ許可されていません。";
 "connect.issue.plugin_missing" = "Cairn のプラグインファイルがありません。";
+"connect.issue.unsupported_version" = "この DeepSeek Harness バージョンは Cairn で未検証です。";
 
 "connect.followup.codex_trust" = "Codex で /hooks を一度実行し、Cairn のハンドラーを信頼してください。";
 "connect.followup.openclaw_restart" = "OpenClaw デスクトップが起動中だった場合は再起動してください。";
 "connect.followup.hermes_enable" = "次を実行してください: hermes plugins enable cairn";
 "connect.followup.hermes_restart" = "反映には Hermes の再起動が必要です。すでに動作中のゲートウェイやセッションは古い設定のままです。";
+"connect.followup.deepseek_harness_restart" = "Web プロファイルの変更を反映するには DeepSeek Harness を再起動してください。Cairn が実行中のターンを停止することはありません。";
 
 "connect.consent.title" = "OpenClaw の最終応答を Cairn が読み取ることを許可しますか？";
 "connect.consent.body" = "OpenClaw はプラグインが会話を読む前に確認を求めます。Cairn が保持するのは直近のプロンプトと最終応答だけで、この Mac の中だけに残ります。";
+"connect.consent.openclaw.title" = "OpenClaw の最終応答を Cairn が読み取ることを許可しますか？";
+"connect.consent.openclaw.body" = "OpenClaw はプラグインが会話を読む前に確認を求めます。Cairn が保持するのは直近のプロンプトと最終応答だけで、この Mac の中だけに残ります。";
+"connect.consent.deepseek-harness.title" = "完了した DeepSeek Harness ターンを Cairn が監視することを許可しますか？";
+"connect.consent.deepseek-harness.body" = "ローカルプラグインは Harness の session event を監視できます。Cairn が保存するのは直近の実ユーザープロンプトと最終応答だけです。reasoning、ツール引数・結果、完全な trajectory は保存せず、この Mac の中だけに残ります。";
 "connect.consent.allow" = "許可して接続";
 "connect.consent.cancel" = "キャンセル";
 

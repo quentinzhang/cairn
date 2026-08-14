@@ -1,0 +1,6 @@
+# Cairn's completion relay is a host-side observer. It mounts only in the Web
+# profile selected by Cairn and depends on the already-running session store
+# and Web server; it contributes no tools, prompts, routes, or client code.
+- insert:
+    - id: cairn-completion-relay
+      name: '@cairn/cairn-connector'

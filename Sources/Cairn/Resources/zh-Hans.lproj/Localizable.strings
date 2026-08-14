@@ -131,6 +131,8 @@
 "connect.state.available" = "可连接";
 "connect.state.not_installed" = "未安装";
 "connect.state.attention" = "需要处理";
+"connect.state.restart_to_connect" = "重启 Harness 后连接";
+"connect.state.restart_to_disconnect" = "重启 Harness 后断开";
 "connect.state.working" = "处理中…";
 
 "connect.action.connect" = "连接";
@@ -150,14 +152,20 @@
 "connect.issue.partial" = "只为其中一个 Agent 安装了。";
 "connect.issue.no_consent" = "尚未授予对话读取权限。";
 "connect.issue.plugin_missing" = "缺少 Cairn 的插件文件。";
+"connect.issue.unsupported_version" = "这个 DeepSeek Harness 版本尚未经过 Cairn 验证。";
 
 "connect.followup.codex_trust" = "在 Codex 里运行一次 /hooks，并信任 Cairn 的处理器。";
 "connect.followup.openclaw_restart" = "若 OpenClaw 桌面端已在运行，请重启它。";
 "connect.followup.hermes_enable" = "请运行：hermes plugins enable cairn";
 "connect.followup.hermes_restart" = "需要重启 Hermes 才会生效;已在运行的 gateway 或会话会一直沿用旧设置。";
+"connect.followup.deepseek_harness_restart" = "请重启 DeepSeek Harness 使 Web Profile 变更生效。Cairn 不会替你中止正在运行的任务。";
 
 "connect.consent.title" = "允许 Cairn 读取 OpenClaw 的最终回复吗？";
 "connect.consent.body" = "OpenClaw 要求插件读取对话前先征得同意。Cairn 只保留最后一条提示词和最终回复，且仅存放在这台 Mac 上。";
+"connect.consent.openclaw.title" = "允许 Cairn 读取 OpenClaw 的最终回复吗？";
+"connect.consent.openclaw.body" = "OpenClaw 要求插件读取对话前先征得同意。Cairn 只保留最后一条提示词和最终回复，且仅存放在这台 Mac 上。";
+"connect.consent.deepseek-harness.title" = "允许 Cairn 观察 DeepSeek Harness 已完成的任务吗？";
+"connect.consent.deepseek-harness.body" = "本地插件可以观察 Harness session event。Cairn 只保存最近一条真实用户提示和最终回复，不保存 reasoning、工具参数/结果或完整轨迹，且数据仅留在这台 Mac 上。";
 "connect.consent.allow" = "允许并连接";
 "connect.consent.cancel" = "取消";
 

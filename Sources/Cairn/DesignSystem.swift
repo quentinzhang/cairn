@@ -245,6 +245,19 @@ extension Cairn {
             washDark: 0.16
         )
 
+        /// DeepSeek's blue, kept distinct from Cairn jade and the cooler
+        /// OpenCode tone. The stronger dark-scheme rail remains legible over
+        /// the same low-alpha wash used by every other runtime.
+        static let deepSeekHarness = Tone(
+            hue: Color(hex: 0x4D6BFE),
+            railLight: Color(hex: 0x4057D6),
+            railDark: Color(hex: 0x8EA1FF),
+            labelLight: Color(hex: 0x3143B4),
+            labelDark: Color(hex: 0xAAB7FF),
+            washLight: 0.10,
+            washDark: 0.16
+        )
+
         /// Anthropic's clay. The one tone here that is straightforwardly its
         /// agent's own colour.
         static let claudeCode = Tone(
@@ -333,6 +346,8 @@ extension Cairn {
                 Agent(id: source, name: "OpenClaw", tone: .openClaw)
             case "opencode":
                 Agent(id: source, name: "OpenCode", tone: .openCode)
+            case "deepseek-harness":
+                Agent(id: source, name: "DeepSeek Harness", tone: .deepSeekHarness)
             default:
                 Agent(id: source, name: source.capitalized, tone: .unknown)
             }
